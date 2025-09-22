@@ -1,0 +1,153 @@
+# Cyberpunk HARDEND Configuration - Neural Interface Settings
+# "The future is now, samurai"
+
+neural_interface:
+  version: "2077.1.0"
+  mode: "cyberpunk"
+  ghost_mode: false
+  stealth_mode: false
+  matrix_effects: true
+
+# Neural pathway (kernel) security rules
+neural_pathways:
+  - parameter: "net.ipv4.ip_forward"
+    expected: "0"
+    severity: "HIGH"
+    description: "Disable IP forwarding neural pathway"
+    threat_level: "NETWORK_COMPROMISE"
+    exploitable: true
+    references: ["CIS 3.1.1", "NIST SC-7"]
+
+  - parameter: "kernel.randomize_va_space"
+    expected: "2"
+    severity: "CRITICAL"
+    description: "Enable full ASLR neural scrambling"
+    threat_level: "MEMORY_EXPLOIT"
+    exploitable: true
+    references: ["CIS 1.5.3", "CVE-2016-3672"]
+
+  - parameter: "net.ipv4.tcp_syncookies"
+    expected: "1"
+    severity: "HIGH"
+    description: "Enable TCP SYN flood neural protection"
+    threat_level: "DOS_ATTACK"
+    exploitable: true
+    references: ["CIS 3.2.8", "CVE-2018-5390"]
+
+# ICE barrier (service) security rules
+ice_barriers:
+  - service: "telnet"
+    should_run: false
+    severity: "CRITICAL"
+    description: "Telnet daemon - unencrypted protocol breach"
+    threat_level: "CRITICAL_BREACH"
+    attack_vector: "plaintext credential harvesting"
+    exploitable: true
+    references: ["CIS 2.1.1", "NIST IA-5"]
+
+  - service: "sshd"
+    should_run: true
+    severity: "HIGH"
+    description: "SSH daemon - secure remote access barrier"
+    threat_level: "SECURED"
+    attack_vector: "properly configured SSH is secure"
+    exploitable: false
+    references: ["CIS 5.2.1"]
+
+# Ghost Protocol (SSH) security rules
+ghost_protocol:
+  - parameter: "Protocol"
+    expected: "2"
+    severity: "CRITICAL"
+    description: "SSH Protocol version - legacy v1 has critical vulns"
+    threat_level: "CRITICAL_BREACH"
+    attack_vector: "protocol downgrade attacks"
+    exploitable: true
+    cve_ids: ["CVE-2001-0572", "CVE-1999-1010"]
+
+  - parameter: "PermitRootLogin"
+    expected: "no"
+    severity: "CRITICAL"
+    description: "Root login via Ghost Protocol"
+    threat_level: "CRITICAL_BREACH"
+    attack_vector: "direct root compromise"
+    exploitable: true
+
+# Filesystem Matrix security rules
+matrix_nodes:
+  - path: "/tmp"
+    required_options: ["nosuid", "noexec", "nodev"]
+    severity: "HIGH"
+    description: "Temporary filesystem security barriers"
+    threat_level: "PRIVILEGE_ESCALATION"
+
+  - filesystem: "cramfs"
+    action: "blacklist"
+    severity: "MEDIUM"
+    description: "Dangerous compressed ROM filesystem"
+    threat_level: "CODE_INJECTION"
+
+# Output configuration
+output:
+  format: "cyberpunk"
+  include_passed: false
+  show_exploitable_only: false
+  matrix_mode: false
+  color_output: true
+  verbose_remediation: true
+
+# Scanning configuration
+scanning:
+  stealth_mode: false
+  ghost_mode: false
+  advanced_analysis: true
+  deep_scan: true
+  neural_interface: true
+  skip_harmless: false
+
+# Threat assessment settings
+threat_assessment:
+  calculate_scores: true
+  include_attack_vectors: true
+  generate_remediation_plan: true
+  assess_exploitability: true
+  neural_correlation: true
+
+# Reporting settings
+reporting:
+  include_system_info: true
+  show_cyberpunk_banner: true
+  matrix_effects: true
+  threat_visualization: true
+  executive_summary: true
+  technical_details: true
+  remediation_priority: true
+
+# Security categories to scan (cyberpunk themed names)
+scan_modules:
+  neural: true      # Kernel parameters & memory protection
+  ice: true         # Services & daemon analysis
+  ghost: true       # SSH security analysis
+  matrix: true      # Filesystem security matrix
+  net: true         # Network penetration analysis
+  users: true       # User access control vectors
+  perms: true       # File permission vulnerabilities
+  suid: true        # Privilege escalation vectors
+  packages: true    # Software vulnerability database
+  logs: true        # Audit trail & forensic analysis
+  firewall: true    # Network barrier analysis
+  selinux: true     # Mandatory access control bypass
+  cron: true        # Scheduled task exploitation
+  boot: true        # System boot hijack vectors
+
+# Cyberpunk theming
+theme:
+  primary_color: "cyan"
+  accent_color: "magenta"
+  warning_color: "yellow"
+  error_color: "red"
+  success_color: "green"
+  ascii_art: true
+  matrix_effects: true
+  glitch_text: false
+  sound_effects: false
