@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/ConstantineCTF/hardend/pkg/utils"
-	"github.com/fatih/color"
 )
 
 // GhostChecker handles Ghost Protocol (SSH) security analysis

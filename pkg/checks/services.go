@@ -1,15 +1,12 @@
 package checks
 
 import (
-	"bufio"
 	"crypto/sha256"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/ConstantineCTF/hardend/pkg/utils"
-	"github.com/fatih/color"
 )
 
 // ICEChecker handles Intrusion Countermeasures Electronics (Services)

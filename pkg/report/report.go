@@ -11,7 +11,6 @@ import (
 	"github.com/ConstantineCTF/hardend/pkg/checks"
 	"github.com/ConstantineCTF/hardend/pkg/utils"
 	"github.com/fatih/color"
-	"github.com/olekukonko/tablewriter"
 )
 
 // CyberpunkReporter generates cyberpunk-themed security reports
@@ -171,70 +170,52 @@ func (cr *CyberpunkReporter) getExecutiveSummary(results *checks.Results) string
 	return summary.String()
 }
 
-// getCyberpunkTable generates the main findings table
+// getCyberpunkTable generates the main findings table in Markdown format
 func (cr *CyberpunkReporter) getCyberpunkTable(results *checks.Results) string {
-	var tableOutput strings.Builder
+	var out strings.Builder
 
-	tableOutput.WriteString("    ╔══════════════════════════════════════════════════════════════╗\n")
-	tableOutput.WriteString("    ║                    VULNERABILITY MATRIX                      ║\n")
-	tableOutput.WriteString("    ╚══════════════════════════════════════════════════════════════╝\n\n")
+	// Table header
+	out.WriteString("    ╔══════════════════════════════════════════════════════════════╗\n")
+	out.WriteString("    ║                    VULNERABILITY MATRIX                      ║\n")
+	out.WriteString("    ╚══════════════════════════════════════════════════════════════╝\n\n")
 
 	// Sort findings by severity
-	sortedFindings := make([]*checks.Finding, len(results.Findings))
-	copy(sortedFindings, results.Findings)
-	sort.Slice(sortedFindings, func(i, j int) bool {
-		severityOrder := map[checks.Severity]int{
+	sorted := make([]*checks.Finding, len(results.Findings))
+	copy(sorted, results.Findings)
+	sort.Slice(sorted, func(i, j int) bool {
+		order := map[checks.Severity]int{
 			checks.SeverityCritical: 4,
 			checks.SeverityHigh:     3,
 			checks.SeverityMedium:   2,
 			checks.SeverityLow:      1,
 			checks.SeverityInfo:     0,
 		}
-		return severityOrder[sortedFindings[i].Severity] > severityOrder[sortedFindings[j].Severity]
+		return order[sorted[i].Severity] > order[sorted[j].Severity]
 	})
 
-	// Group findings by category
-	categories := make(map[string][]*checks.Finding)
-	for _, finding := range sortedFindings {
-		if finding.Status == checks.StatusPass && cr.format != "matrix" {
-			continue // Skip passed checks in normal mode
-		}
-		categories[finding.Category] = append(categories[finding.Category], finding)
-	}
+	// Markdown-style table header row
+	out.WriteString("    | STATUS | SEVERITY | FINDING | CURRENT | EXPECTED |\n")
+	out.WriteString("    | ------ | -------- | ------- | ------- | -------- |\n")
 
-	// Generate tables for each category
-	for category, findings := range categories {
-		if len(findings) == 0 {
+	// Generate table rows
+	for _, f := range sorted {
+		if f.Status == checks.StatusPass && cr.format != "matrix" {
 			continue
 		}
+		status := cr.formatStatus(f.Status)
+		severity := cr.formatSeverity(f.Severity)
+		title := cr.truncateString(f.Title, 30)
+		actual := cr.truncateString(f.Actual, 15)
+		expected := cr.truncateString(f.Expected, 15)
 
-		tableOutput.WriteString(fmt.Sprintf("\n    ◢◤ %s ANALYSIS:\n", strings.ToUpper(category)))
-		tableOutput.WriteString("    " + strings.Repeat("─", 70) + "\n")
-
-		table := tablewriter.NewWriter(&tableOutput)
-		table.SetHeader([]string{"STATUS", "SEVERITY", "FINDING", "CURRENT", "EXPECTED"})
-		table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
-		table.SetCenterSeparator("|")
-		table.SetColumnSeparator("|")
-		table.SetRowSeparator("-")
-		table.SetHeaderAlignment(tablewriter.ALIGN_CENTER)
-		table.SetAlignment(tablewriter.ALIGN_LEFT)
-		table.SetTablePadding("  ")
-
-		for _, finding := range findings {
-			status := cr.formatStatus(finding.Status)
-			severity := cr.formatSeverity(finding.Severity)
-			title := cr.truncateString(finding.Title, 30)
-			actual := cr.truncateString(finding.Actual, 15)
-			expected := cr.truncateString(finding.Expected, 15)
-
-			table.Append([]string{status, severity, title, actual, expected})
-		}
-
-		table.Render()
+		out.WriteString(fmt.Sprintf(
+			"    | %s | %s | %s | %s | %s |\n",
+			status, severity, title, actual, expected,
+		))
 	}
 
-	return tableOutput.String()
+	out.WriteString("\n")
+	return out.String()
 }
 
 // getSummarySection generates the summary statistics section
@@ -315,7 +296,9 @@ func (cr *CyberpunkReporter) getRemediationSection(results *checks.Results) stri
 		remediation.WriteString("    ◢◤ CRITICAL ISSUES (Immediate Action Required):\n\n")
 		for i, finding := range criticalFindings {
 			remediation.WriteString(fmt.Sprintf("    %d. %s\n", i+1, finding.Title))
-			remediation.WriteString(fmt.Sprintf("       %s\n\n", finding.Remediation))
+			if finding.Remediation != "" {
+				remediation.WriteString(fmt.Sprintf("       %s\n\n", finding.Remediation))
+			}
 		}
 	}
 
@@ -324,7 +307,9 @@ func (cr *CyberpunkReporter) getRemediationSection(results *checks.Results) stri
 		remediation.WriteString("    ◢◤ HIGH PRIORITY ISSUES:\n\n")
 		for i, finding := range highFindings {
 			remediation.WriteString(fmt.Sprintf("    %d. %s\n", i+1, finding.Title))
-			remediation.WriteString(fmt.Sprintf("       %s\n\n", finding.Remediation))
+			if finding.Remediation != "" {
+				remediation.WriteString(fmt.Sprintf("       %s\n\n", finding.Remediation))
+			}
 		}
 	}
 
@@ -390,13 +375,11 @@ func (cr *CyberpunkReporter) generateMatrixReport(results *checks.Results) strin
 
 // generateJSONReport creates JSON formatted output
 func (cr *CyberpunkReporter) generateJSONReport(results *checks.Results) (string, error) {
-	// Add cyberpunk metadata to JSON
+	// Add metadata to JSON
 	jsonReport := map[string]interface{}{
-		"hardend_version":  "2077.1.0",
-		"report_type":      "cyberpunk_security_assessment",
-		"neural_interface": true,
-		"matrix_analysis":  true,
-		"system_info":      results.SystemInfo,
+		"hardend_version": "2077.1.0",
+		"report_type":     "security_assessment",
+		"system_info":     results.SystemInfo,
 		"scan_metadata": map[string]interface{}{
 			"start_time": results.StartTime,
 			"end_time":   results.EndTime,

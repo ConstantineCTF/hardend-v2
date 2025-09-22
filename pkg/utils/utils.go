@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fatih/color"
 	"github.com/briandowns/spinner"
+	"github.com/fatih/color"
 )
 
 // IsRoot checks if the current user has root access level
@@ -141,7 +141,7 @@ func GlitchText(text string, intensity int) string {
 		return text
 	}
 
-	glitchChars := []rune("!@#$%^&*(){}[]|\\:;"'<>?")
+	glitchChars := []rune("!@#$%^&*(){}[]|\\:;\"'<>?")
 	runes := []rune(text)
 
 	for i := 0; i < intensity && i < len(runes); i++ {

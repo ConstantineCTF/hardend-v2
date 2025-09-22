@@ -1,18 +1,14 @@
 package checks
 
 import (
-	"bufio"
 	"crypto/md5"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/ConstantineCTF/hardend/pkg/utils"
-	"github.com/fatih/color"
 )
 
 // NeuralChecker handles kernel neural pathway security analysis

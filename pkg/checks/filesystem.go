@@ -5,13 +5,10 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/ConstantineCTF/hardend/pkg/utils"
-	"github.com/fatih/color"
 )
 
 // MatrixChecker handles Filesystem Matrix security analysis
