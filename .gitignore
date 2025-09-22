@@ -1,0 +1,55 @@
+# Binaries
+hardend
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Built test binary
+*.test
+
+# Go coverage output
+coverage.out
+coverage.html
+
+# Dependency directory (if you ever vendor)
+vendor/
+
+# IDE files
+.idea/
+*.iml
+*.ipr
+workspace.xml
+modules.xml
+material_theme_project_new.xml
+
+# Editor swap/temp files
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files and directories
+tmp/
+temp/
+
+# Config override files
+config_local.yaml
+local_config.yaml
+
+# Docker
+docker-compose.override.yml
+.env
+
+# Project diagrams or exports (keep source copies, ignore exports)
+*.png
+*.jpg
+*.svg
+
+# Ignore install artifacts
+install.sh~
