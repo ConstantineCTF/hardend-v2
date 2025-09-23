@@ -1,5 +1,9 @@
 # HARDEND - Linux Security Hardening Assessment Tool
 
+**Author:** Constantine  
+**Email:** constantine.ctf@proton.me
+
+
 A comprehensive, enterprise-grade Linux security assessment framework for system administrators and security professionals.
 
 ## Overview
@@ -324,8 +328,8 @@ golang.org/x/sys              // System-level operations
 
 ## License and Support
 
-### License
 This project is licensed under the MIT License - see the LICENSE file for details.
+
 
 ### Support and Documentation
 - **Issues**: Report bugs and request features via GitHub Issues
@@ -333,9 +337,9 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - **Community**: Join discussions and get support from the community
 
 ### Security Reporting
-For security vulnerabilities in HARDEND itself:
-- Email: security@hardend.project
-- Response time: 48 hours for acknowledgment
+If you find a vulnerability in HARDEND:
+- Email: constantine.ctf@proton.me
+- Response time: 48 hours for acknowledgment :)
 - Coordinated disclosure process
 
 ## Roadmap
