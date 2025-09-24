@@ -37,7 +37,7 @@ check_requirements() {
 
     # Check Go version
     GO_VERSION=$(go version | grep -oP 'go\d+\.\d+' | grep -oP '\d+\.\d+')
-    REQUIRED_VERSION="1.5"
+    REQUIRED_VERSION="1.25"
 
     if [[ $(echo "$GO_VERSION >= $REQUIRED_VERSION" | bc -l 2>/dev/null || echo "0") -eq 0 ]]; then
         echo -e "${RED}Error: Go version $GO_VERSION insufficient${NC}"
