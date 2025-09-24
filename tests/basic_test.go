@@ -3,19 +3,11 @@ package tests
 import (
 	checks "github.com/ConstantineCTF/hardend/pkg/checks"
 	"testing"
-
-	checks "github.com/ConstantineCTF/hardend/pkg/checks"
 )
 
 // TestTypesBasic tests basic type functionality
 func TestTypesBasic(t *testing.T) {
-<<<<<<< Updated upstream
-=======
 	// Test severity levels
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
 	severities := []checks.Severity{
 		checks.SeverityInfo,
 		checks.SeverityLow,
@@ -28,13 +20,7 @@ func TestTypesBasic(t *testing.T) {
 		t.Errorf("Expected 5 severity levels, got %d", len(severities))
 	}
 
-<<<<<<< Updated upstream
-=======
 	// Test check status
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
 	statuses := []checks.CheckStatus{
 		checks.StatusPass,
 		checks.StatusFail,
@@ -59,13 +45,7 @@ func TestResultsBasic(t *testing.T) {
 		Summary:  checks.Summary{},
 	}
 
-<<<<<<< Updated upstream
-=======
 	// Test adding a finding
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
 	finding := &checks.Finding{
 		ID:          "TEST_001",
 		Title:       "Test Finding",
