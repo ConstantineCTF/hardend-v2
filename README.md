@@ -57,7 +57,7 @@ hardend/
 ```
 
 ### Technical Stack
-- **Language**: Go 1.21+
+- **Language**: Go 1.25+
 - **Architecture**: Modular checker system
 - **Dependencies**: Minimal external dependencies
 - **Performance**: Optimized for enterprise environments
@@ -117,17 +117,6 @@ chmod +x install.sh
 ./install.sh
 ```
 
-### Manual Build
-```bash
-# Download dependencies
-go mod download
-
-# Build application
-go build -o hardend cmd/hardend/main.go
-
-# Install system-wide (optional)
-sudo cp hardend /usr/local/bin/
-```
 
 ## Usage
 
@@ -246,7 +235,6 @@ scan_modules:
 
 ### Standalone Deployment
 - Single binary with zero dependencies
-- Cross-platform compatibility
 - Minimal resource requirements
 - Portable security assessment
 
@@ -364,4 +352,5 @@ If you find a vulnerability in HARDEND:
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/ConstantineCTF/hardend)](https://goreportcard.com/report/github.com/ConstantineCTF/hardend)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GoDoc](https://godoc.org/github.com/ConstantineCTF/hardend?status.svg)](https://godoc.org/github.com/ConstantineCTF/hardend)
+[![GoDoc](https://pkg.go.dev/badge/github.com/ConstantineCTF/hardend?tab=doc)](https://pkg.go.dev/github.com/ConstantineCTF/hardend)
+

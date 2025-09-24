@@ -1,4 +1,4 @@
-FROM golang:1.21-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git gcc musl-dev
@@ -22,7 +22,7 @@ FROM alpine:latest
 RUN apk add --no-cache \
     ca-certificates \
     util-linux \
-    procfs \
+    procps \
     coreutils \
     systemd \
     openssh \
@@ -50,6 +50,6 @@ ENTRYPOINT ["/entrypoint.sh"]
 CMD ["./hardend", "--help"]
 
 # Metadata
-LABEL maintainer="cybersec@hardend.io"
+LABEL maintainer="constantine.ctf@proton.me"
 LABEL description="Cyberpunk Linux Security Hardening Assessment Tool"
 LABEL version="2077.1.0"
