@@ -31,13 +31,13 @@ check_requirements() {
     # Check Go installation
     if ! command -v go &> /dev/null; then
         echo -e "${RED}Error: Go compiler not found${NC}"
-        echo "Please install Go 1.21+ from https://golang.org/dl/"
+        echo "Please install Go 1.25+ from https://golang.org/dl/"
         exit 1
     fi
 
     # Check Go version
     GO_VERSION=$(go version | grep -oP 'go\d+\.\d+' | grep -oP '\d+\.\d+')
-    REQUIRED_VERSION="1.21"
+    REQUIRED_VERSION="1.5"
 
     if [[ $(echo "$GO_VERSION >= $REQUIRED_VERSION" | bc -l 2>/dev/null || echo "0") -eq 0 ]]; then
         echo -e "${RED}Error: Go version $GO_VERSION insufficient${NC}"
@@ -67,7 +67,7 @@ build_application() {
     echo -e "${GREEN}Building application...${NC}"
 
     # Build with optimization flags
-    LDFLAGS="-s -w -X main.version=$APP_VERSION -X main.buildTime=$(date +%s)"
+    LDFLAGS="-s -w -X main.version=$APP_VERSION -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
     if go build -ldflags="$LDFLAGS" -o $APP_NAME cmd/hardend/main.go; then
         echo -e "${GREEN}Build completed successfully${NC}"
@@ -90,7 +90,7 @@ build_application() {
 install_system() {
     echo -e "${GREEN}Installing to system...${NC}"
 
-    INSTALL_DIR="/opt/hardend"
+    INSTALL_DIR="/usr/local/share/hardend"
     sudo mkdir -p "$INSTALL_DIR"
     sudo mkdir -p "$INSTALL_DIR/configs"
 
@@ -137,6 +137,11 @@ main() {
     check_requirements
     install_dependencies
     build_application
+
+    if ! go test ./tests; then
+        echo -e "${RED}Error: Tests failed${NC}"
+        exit 1
+    fi
 
     # Ask for system installation
     echo ""
