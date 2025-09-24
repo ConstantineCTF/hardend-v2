@@ -24,7 +24,6 @@ RUN apk add --no-cache \
     util-linux \
     procps \
     coreutils \
-    systemd \
     openssh \
     iptables \
     net-tools \
