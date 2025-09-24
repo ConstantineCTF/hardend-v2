@@ -12,6 +12,9 @@ func TestTypesBasic(t *testing.T) {
 <<<<<<< Updated upstream
 =======
 	// Test severity levels
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 	severities := []checks.Severity{
 		checks.SeverityInfo,
@@ -28,6 +31,9 @@ func TestTypesBasic(t *testing.T) {
 <<<<<<< Updated upstream
 =======
 	// Test check status
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 	statuses := []checks.CheckStatus{
 		checks.StatusPass,
@@ -56,6 +62,9 @@ func TestResultsBasic(t *testing.T) {
 <<<<<<< Updated upstream
 =======
 	// Test adding a finding
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 	finding := &checks.Finding{
 		ID:          "TEST_001",
