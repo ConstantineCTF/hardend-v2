@@ -1,31 +1,30 @@
-package checks
+package tests
 
 import (
+	checks "github.com/ConstantineCTF/hardend/pkg/checks"
 	"testing"
 )
 
 // TestTypesBasic tests basic type functionality
 func TestTypesBasic(t *testing.T) {
-	// Test severity levels
-	severities := []Severity{
-		SeverityInfo,
-		SeverityLow,
-		SeverityMedium,
-		SeverityHigh,
-		SeverityCritical,
+	severities := []checks.Severity{
+		checks.SeverityInfo,
+		checks.SeverityLow,
+		checks.SeverityMedium,
+		checks.SeverityHigh,
+		checks.SeverityCritical,
 	}
 
 	if len(severities) != 5 {
 		t.Errorf("Expected 5 severity levels, got %d", len(severities))
 	}
 
-	// Test check status
-	statuses := []CheckStatus{
-		StatusPass,
-		StatusFail,
-		StatusWarn,
-		StatusInfo,
-		StatusSkip,
+	statuses := []checks.CheckStatus{
+		checks.StatusPass,
+		checks.StatusFail,
+		checks.StatusWarn,
+		checks.StatusInfo,
+		checks.StatusSkip,
 	}
 
 	if len(statuses) != 5 {
@@ -35,22 +34,21 @@ func TestTypesBasic(t *testing.T) {
 
 // TestResultsBasic tests basic Results functionality
 func TestResultsBasic(t *testing.T) {
-	results := &Results{
-		SystemInfo: SystemInfo{
+	results := &checks.Results{
+		SystemInfo: checks.SystemInfo{
 			Hostname: "test-host",
 			OS:       "Linux",
 		},
-		Findings: make([]*Finding, 0),
-		Summary:  Summary{},
+		Findings: make([]*checks.Finding, 0),
+		Summary:  checks.Summary{},
 	}
 
-	// Test adding a finding
-	finding := &Finding{
+	finding := &checks.Finding{
 		ID:          "TEST_001",
 		Title:       "Test Finding",
 		Description: "Test finding description",
-		Severity:    SeverityMedium,
-		Status:      StatusFail,
+		Severity:    checks.SeverityMedium,
+		Status:      checks.StatusFail,
 		Expected:    "secure configuration",
 		Actual:      "insecure configuration",
 		Category:    "Test Category",
@@ -62,15 +60,12 @@ func TestResultsBasic(t *testing.T) {
 	if len(results.Findings) != 1 {
 		t.Errorf("Expected 1 finding, got %d", len(results.Findings))
 	}
-
 	if results.Summary.TotalChecks != 1 {
 		t.Errorf("Expected 1 total check, got %d", results.Summary.TotalChecks)
 	}
-
 	if results.Summary.FailedChecks != 1 {
 		t.Errorf("Expected 1 failed check, got %d", results.Summary.FailedChecks)
 	}
-
 	if results.Summary.MediumIssues != 1 {
 		t.Errorf("Expected 1 medium issue, got %d", results.Summary.MediumIssues)
 	}
@@ -78,17 +73,15 @@ func TestResultsBasic(t *testing.T) {
 
 // TestThreatLevel tests threat level calculation
 func TestThreatLevel(t *testing.T) {
-	results := &Results{
-		Summary: Summary{},
+	results := &checks.Results{
+		Summary: checks.Summary{},
 	}
 
-	// Test minimal threat level
 	threatLevel := results.GetThreatLevel()
 	if threatLevel != "MINIMAL" {
 		t.Errorf("Expected MINIMAL threat level, got %s", threatLevel)
 	}
 
-	// Test critical threat level
 	results.Summary.CriticalIssues = 1
 	threatLevel = results.GetThreatLevel()
 	if threatLevel != "CRITICAL" {
@@ -98,8 +91,8 @@ func TestThreatLevel(t *testing.T) {
 
 // TestSecurityScore tests security score calculation
 func TestSecurityScore(t *testing.T) {
-	results := &Results{
-		Summary: Summary{
+	results := &checks.Results{
+		Summary: checks.Summary{
 			TotalChecks:  10,
 			PassedChecks: 8,
 			FailedChecks: 2,
@@ -108,7 +101,6 @@ func TestSecurityScore(t *testing.T) {
 
 	score := results.GenerateSecurityScore()
 
-	// Should be 80% (8/10 * 100)
 	expectedScore := 80.0
 	if score != expectedScore {
 		t.Errorf("Expected security score %.1f, got %.1f", expectedScore, score)
@@ -117,11 +109,11 @@ func TestSecurityScore(t *testing.T) {
 
 // TestFindingString tests Finding string representation
 func TestFindingString(t *testing.T) {
-	finding := &Finding{
+	finding := &checks.Finding{
 		ID:          "TEST_001",
 		Title:       "Test Finding",
-		Severity:    SeverityHigh,
-		Status:      StatusFail,
+		Severity:    checks.SeverityHigh,
+		Status:      checks.StatusFail,
 		Exploitable: true,
 	}
 
