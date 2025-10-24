@@ -1,4 +1,3 @@
-```markdown name=README.md
 # HARDEND - Linux Security Hardening Assessment Tool
 
 **Author:** Constantine
