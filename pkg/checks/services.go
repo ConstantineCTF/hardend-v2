@@ -1,511 +1,305 @@
 package checks
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"strings"
-	"time"
 
-	"github.com/ConstantineCTF/hardend/pkg/utils"
+	"github.com/ConstantineCTF/hardend/pkg/utils" // Ensure this import path is correct
 )
 
-// ICEChecker handles Intrusion Countermeasures Electronics (Services)
-type ICEChecker struct {
-	logger   *utils.CyberpunkLogger
+// ServicesChecker handles service security analysis
+type ServicesChecker struct {
+	logger   *utils.Logger // Corrected: Use Logger
 	stealth  bool
-	advanced bool
+	advanced bool // Flag to potentially show more details or INFO checks
 }
 
-// NewICEChecker creates a new ICE system analyzer
-func NewICEChecker(verbose, stealth, advanced bool) *ICEChecker {
-	return &ICEChecker{
-		logger:   utils.NewCyberpunkLogger(verbose, stealth),
+// NewServicesChecker creates a new service analyzer
+func NewServicesChecker(verbose, stealth, advanced bool) *ServicesChecker {
+	return &ServicesChecker{
+		logger:   utils.NewLogger(verbose, stealth), // Corrected: Use NewLogger
 		stealth:  stealth,
 		advanced: advanced,
 	}
 }
 
-// ICERule defines an intrusion countermeasure rule
-type ICERule struct {
+// ServiceRule defines a service security rule
+type ServiceRule struct {
 	ServiceName  string
-	ShouldRun    bool
+	ShouldRun    bool // True if required, False if prohibited
 	Description  string
 	Severity     Severity
 	References   []string
-	ThreatLevel  string
 	Exploitable  bool
-	AttackVector string
+	AttackVector string // Optional: Describe attack if prohibited service is running
 }
 
-// RunChecks performs comprehensive ICE system analysis
-func (ic *ICEChecker) RunChecks(results *Results) error {
-	ic.logger.Info("◢◤ Activating ICE countermeasures scan...")
+// RunChecks performs comprehensive service analysis
+func (sc *ServicesChecker) RunChecks(results *Results) error {
+	sc.logger.Info("Initiating service scan...")
 
-	if !ic.stealth {
-		utils.ProgressBar("Analyzing ICE barriers", 1500*time.Millisecond)
-	}
-
-	// Core ICE barrier analysis
-	rules := ic.getICERules()
+	rules := sc.getServiceRules() // TODO: Load rules from config
 	for _, rule := range rules {
-		ic.logger.Debug("Scanning ICE barrier: %s", rule.ServiceName)
+		sc.logger.Debug("Scanning service: %s", rule.ServiceName)
 
-		isRunning, isEnabled, err := ic.analyzeICEBarrier(rule.ServiceName)
+		isRunning, isEnabled, err := sc.analyzeServiceStatus(rule.ServiceName)
+		// Error handling: Log if verbose, decide whether to add a finding
 		if err != nil {
-			finding := &Finding{
-				ID:          fmt.Sprintf("ICE_%s_ERROR", strings.ToUpper(rule.ServiceName)),
-				Title:       fmt.Sprintf("ICE barrier %s analysis failed", rule.ServiceName),
-				Description: fmt.Sprintf("Unable to analyze ICE barrier %s - potential system compromise", rule.ServiceName),
-				Severity:    SeverityMedium,
-				Status:      StatusSkip,
-				Expected:    "barrier analysis",
-				Actual:      fmt.Sprintf("SCAN_ERROR: %v", err),
-				Category:    "ICE Barriers",
-				References:  rule.References,
+			sc.logger.Debug("Could not determine status for service %s: %v", rule.ServiceName, err)
+			// Optionally add a finding if status check fails for a critical service
+			if rule.ShouldRun && rule.Severity >= SeverityHigh {
+				finding := &Finding{
+					ID:          fmt.Sprintf("SVC_%s_ERROR", strings.ToUpper(rule.ServiceName)),
+					Title:       fmt.Sprintf("Service %s status check failed", rule.ServiceName),
+					Description: fmt.Sprintf("Unable to determine status for required service %s: %v", rule.ServiceName, err),
+					Severity:    SeverityMedium, // Downgrade slightly as it's an error, not confirmed state
+					Status:      StatusSkip,
+					Expected:    fmt.Sprintf("should_run: %t", rule.ShouldRun),
+					Actual:      fmt.Sprintf("Check Error: %v", err),
+					Category:    "Services",
+					References:  rule.References,
+				}
+				results.AddFinding(finding)
 			}
-			results.AddFinding(finding)
-			continue
+			continue // Skip rule if status cannot be determined
 		}
 
 		status := StatusPass
-		threat := "SECURED"
+		pass := true
 
 		if rule.ShouldRun {
+			// Rule: Service SHOULD be running AND enabled
 			if !isRunning || !isEnabled {
 				status = StatusFail
-				threat = "VULNERABLE"
+				pass = false
 			}
 		} else {
+			// Rule: Service should NOT be running AND NOT enabled
 			if isRunning || isEnabled {
 				status = StatusFail
-				threat = rule.ThreatLevel
+				pass = false
 			}
 		}
 
-		finding := &Finding{
-			ID:          fmt.Sprintf("ICE_%s", strings.ToUpper(rule.ServiceName)),
-			Title:       fmt.Sprintf("ICE %s [%s]", rule.ServiceName, threat),
-			Description: rule.Description,
-			Severity:    rule.Severity,
-			Status:      status,
-			Expected:    fmt.Sprintf("running: %t, enabled: %t", rule.ShouldRun, rule.ShouldRun),
-			Actual:      fmt.Sprintf("running: %t, enabled: %t", isRunning, isEnabled),
-			Remediation: ic.getICERemediation(rule.ServiceName, rule.ShouldRun, rule.AttackVector),
-			Category:    "ICE Barriers",
-			References:  rule.References,
-			Exploitable: rule.Exploitable,
+		// Add finding if failed, or if passed and advanced/verbose mode is on
+		if !pass || sc.advanced {
+			finding := &Finding{
+				ID:          fmt.Sprintf("SVC_%s", strings.ToUpper(rule.ServiceName)),
+				Title:       fmt.Sprintf("Service %s status check", rule.ServiceName),
+				Description: rule.Description,
+				Severity:    rule.Severity,
+				Status:      status,
+				Expected:    fmt.Sprintf("running=%t, enabled=%t", rule.ShouldRun, rule.ShouldRun),
+				Actual:      fmt.Sprintf("running=%t, enabled=%t", isRunning, isEnabled),
+				Remediation: sc.getServiceRemediation(rule.ServiceName, rule.ShouldRun),
+				Category:    "Services",
+				References:  rule.References,
+				Exploitable: rule.Exploitable && !pass, // Only exploitable if the check failed
+			}
+			if pass { // If showing passed check in advanced mode
+				finding.Severity = SeverityInfo
+				finding.Status = StatusInfo
+				finding.Title = fmt.Sprintf("Service %s status compliant", rule.ServiceName)
+			} else {
+				finding.Title = fmt.Sprintf("Service %s status non-compliant", rule.ServiceName)
+			}
+			results.AddFinding(finding)
 		}
-		results.AddFinding(finding)
 	}
 
-	// Advanced ICE analysis
-	if ic.advanced {
-		ic.performAdvancedICEAnalysis(results)
-	}
-
-	// Backdoor service detection
-	ic.detectBackdoorServices(results)
-
-	// Process hollowing detection
-	ic.detectProcessHollowing(results)
-
-	ic.logger.Info("◢◤ ICE barrier scan complete - %d barriers analyzed", len(rules))
+	sc.logger.Info("Service scan complete. %d rules analyzed.", len(rules))
 	return nil
 }
 
-// analyzeICEBarrier checks the status of an ICE barrier (service)
-func (ic *ICEChecker) analyzeICEBarrier(serviceName string) (bool, bool, error) {
-	var isRunning, isEnabled bool
-	var err error
-
-	if ic.stealth {
-		// Stealth mode - use proc filesystem
+// analyzeServiceStatus checks the status of a service using systemctl or pgrep
+func (sc *ServicesChecker) analyzeServiceStatus(serviceName string) (isRunning bool, isEnabled bool, err error) {
+	if sc.stealth {
+		// Stealth mode: use pgrep (only checks if running)
+		// Note: This is less reliable as process name might differ from service name
 		isRunning = utils.CheckProcessRunning(serviceName)
-		// In stealth mode, we can't easily check if service is enabled
-		isEnabled = isRunning // Assume if running, it's enabled
-	} else {
-		// Normal mode - use systemctl
-		output, err := utils.ExecuteCommand("systemctl", "is-active", serviceName)
-		isRunning = err == nil && strings.TrimSpace(output) == "active"
-
-		output, err = utils.ExecuteCommand("systemctl", "is-enabled", serviceName)
-		isEnabled = err == nil && strings.TrimSpace(output) == "enabled"
+		// We cannot reliably check 'enabled' status in stealth mode easily. Assume based on running status.
+		isEnabled = isRunning
+		return isRunning, isEnabled, nil // No error returned from CheckProcessRunning in this impl
 	}
 
-	return isRunning, isEnabled, err
+	// Normal mode: use systemctl
+	activeOutput, activeErr := utils.ExecuteCommand("systemctl", "is-active", serviceName)
+	if activeErr != nil {
+		// Error might mean service doesn't exist or systemctl failed. Log if verbose.
+		sc.logger.Debug("systemctl is-active failed for %s: %v (Output: %s)", serviceName, activeErr, activeOutput)
+		// If error is 'exit status 3', it means inactive, not necessarily an error running the command.
+		// Other errors might be more serious. We'll treat any error as 'not running'.
+	}
+	isRunning = activeErr == nil && strings.TrimSpace(activeOutput) == "active"
+
+	enabledOutput, enabledErr := utils.ExecuteCommand("systemctl", "is-enabled", serviceName)
+	if enabledErr != nil {
+		// Error might mean service doesn't exist or systemctl failed.
+		sc.logger.Debug("systemctl is-enabled failed for %s: %v (Output: %s)", serviceName, enabledErr, enabledOutput)
+		// If error is 'exit status 1', it usually means disabled/static etc. Treat as not enabled.
+	}
+	// Note: 'static' services are also considered not 'enabled' in the traditional sense.
+	isEnabled = enabledErr == nil && strings.TrimSpace(enabledOutput) == "enabled"
+
+	// Decide if we should return an error to the caller
+	// For now, let's assume if systemctl ran but service not found, it's not an *execution* error
+	// but rather the service state is determined. Return nil error unless systemctl itself failed badly.
+	if activeErr != nil && !strings.Contains(activeErr.Error(), "exit status") {
+		return false, false, activeErr // Return error if systemctl command likely failed
+	}
+	if enabledErr != nil && !strings.Contains(enabledErr.Error(), "exit status") {
+		return isRunning, false, enabledErr // Return error if systemctl command likely failed
+	}
+
+	return isRunning, isEnabled, nil // No execution error
 }
 
-// getICERules returns comprehensive ICE barrier security rules
-func (ic *ICEChecker) getICERules() []ICERule {
-	return []ICERule{
-		// Critical threat services that should be DISABLED
+// getServiceRules returns comprehensive service security rules
+// TODO: Load this from config.yaml
+func (sc *ServicesChecker) getServiceRules() []ServiceRule {
+	// Professional rules based on common hardening guides
+	return []ServiceRule{
+		// --- Prohibited Services (ShouldRun: false) ---
 		{
-			ServiceName:  "telnet",
+			ServiceName:  "telnet.socket", // Often socket-activated
 			ShouldRun:    false,
-			Description:  "Telnet daemon - unencrypted protocol breach",
+			Description:  "Telnet is an unencrypted remote access protocol.",
 			Severity:     SeverityCritical,
-			References:   []string{"CIS 2.1.1", "NIST IA-5"},
-			ThreatLevel:  "CRITICAL_BREACH",
+			References:   []string{"CIS 2.1.1"},
 			Exploitable:  true,
-			AttackVector: "plaintext credential harvesting, MitM attacks",
+			AttackVector: "Plaintext credential sniffing, Man-in-the-Middle.",
 		},
 		{
-			ServiceName:  "rsh",
+			ServiceName:  "rsh.socket",
 			ShouldRun:    false,
-			Description:  "Remote shell daemon - legacy attack vector",
+			Description:  "Remote Shell (rsh) is an insecure legacy protocol using weak authentication.",
 			Severity:     SeverityCritical,
 			References:   []string{"CIS 2.1.2"},
-			ThreatLevel:  "CRITICAL_BREACH",
 			Exploitable:  true,
-			AttackVector: "remote code execution, credential theft",
+			AttackVector: "Authentication bypass, remote command execution.",
 		},
 		{
-			ServiceName:  "rlogin",
-			ShouldRun:    false,
-			Description:  "Remote login daemon - authentication bypass risk",
-			Severity:     SeverityCritical,
-			References:   []string{"CIS 2.1.3"},
-			ThreatLevel:  "CRITICAL_BREACH",
-			Exploitable:  true,
-			AttackVector: ".rhosts exploitation, trust relationship abuse",
+			ServiceName: "rlogin.socket",
+			ShouldRun:   false,
+			Description: "Remote Login (rlogin) is an insecure legacy protocol.",
+			Severity:    SeverityCritical,
+			References:  []string{"CIS 2.1.3"},
+			Exploitable: true,
 		},
 		{
-			ServiceName:  "rexec",
-			ShouldRun:    false,
-			Description:  "Remote exec daemon - direct command execution",
-			Severity:     SeverityCritical,
-			References:   []string{"CIS 2.1.4"},
-			ThreatLevel:  "CRITICAL_BREACH",
-			Exploitable:  true,
-			AttackVector: "arbitrary command execution",
+			ServiceName: "ypbind", // NIS/YP client service
+			ShouldRun:   false,
+			Description: "Network Information Service (NIS/YP) is an insecure legacy directory service.",
+			Severity:    SeverityHigh,
+			References:  []string{"CIS 2.1.5"},
+			Exploitable: true, // Can leak user/password info
 		},
 		{
-			ServiceName:  "nis",
-			ShouldRun:    false,
-			Description:  "Network Information Service - weak authentication",
-			Severity:     SeverityHigh,
-			References:   []string{"CIS 2.1.5"},
-			ThreatLevel:  "HIGH_RISK",
-			Exploitable:  true,
-			AttackVector: "password database enumeration",
+			ServiceName: "avahi-daemon",
+			ShouldRun:   false,
+			Description: "Avahi (mDNS/DNS-SD) broadcasts network services, potentially leaking information on non-essential systems.",
+			Severity:    SeverityLow,
+			References:  []string{"CIS 2.2.3"},
+			Exploitable: false, // Information leak
 		},
 		{
-			ServiceName:  "ntalk",
-			ShouldRun:    false,
-			Description:  "Network talk daemon - information disclosure",
-			Severity:     SeverityMedium,
-			References:   []string{"CIS 2.1.6"},
-			ThreatLevel:  "MEDIUM_RISK",
-			Exploitable:  false,
-			AttackVector: "information gathering",
+			ServiceName: "cups", // CUPS printing service
+			ShouldRun:   false,
+			Description: "CUPS printing service increases attack surface. Disable on systems not requiring printing.",
+			Severity:    SeverityLow,
+			References:  []string{"CIS 2.2.4"},
+			Exploitable: false, // Can have vulnerabilities, but disabling is hardening
 		},
 		{
-			ServiceName:  "xinetd",
-			ShouldRun:    false,
-			Description:  "Extended internet daemon - legacy service launcher",
-			Severity:     SeverityHigh,
-			References:   []string{"CIS 2.1.7"},
-			ThreatLevel:  "HIGH_RISK",
-			Exploitable:  true,
-			AttackVector: "service enumeration, legacy protocol exploitation",
+			ServiceName: "isc-dhcp-server", // Or dhcpd depending on distro
+			ShouldRun:   false,
+			Description: "DHCP Server service should only run on designated DHCP servers.",
+			Severity:    SeverityMedium,
+			References:  []string{"CIS 2.2.5"},
+			Exploitable: true, // Rogue DHCP server risk
 		},
 		{
-			ServiceName:  "avahi-daemon",
-			ShouldRun:    false,
-			Description:  "Avahi mDNS/DNS-SD daemon - service discovery leak",
-			Severity:     SeverityLow,
-			References:   []string{"CIS 2.2.3"},
-			ThreatLevel:  "LOW_RISK",
-			Exploitable:  false,
-			AttackVector: "network reconnaissance",
+			ServiceName: "slapd", // OpenLDAP server
+			ShouldRun:   false,
+			Description: "LDAP Server service should only run on designated LDAP servers.",
+			Severity:    SeverityMedium,
+			References:  []string{"CIS 2.2.6"}, // Example reference
+			Exploitable: false,                 // Depends on config if running
 		},
 		{
-			ServiceName:  "cups",
-			ShouldRun:    false,
-			Description:  "Print service daemon - unnecessary attack surface",
-			Severity:     SeverityLow,
-			References:   []string{"CIS 2.2.4"},
-			ThreatLevel:  "LOW_RISK",
-			Exploitable:  false,
-			AttackVector: "local privilege escalation",
+			ServiceName: "nfs-server", // Or nfsd
+			ShouldRun:   false,
+			Description: "NFS Server service should only run on designated NFS servers.",
+			Severity:    SeverityMedium,
+			References:  []string{"CIS 2.2.7"}, // Example reference
+			Exploitable: true,                  // Misconfigured NFS is risky
 		},
 		{
-			ServiceName:  "dhcpd",
-			ShouldRun:    false,
-			Description:  "DHCP server daemon - network manipulation risk",
-			Severity:     SeverityMedium,
-			References:   []string{"CIS 2.2.5"},
-			ThreatLevel:  "MEDIUM_RISK",
-			Exploitable:  true,
-			AttackVector: "DHCP spoofing, network redirection",
-		},
-		// Critical services that SHOULD be running
-		{
-			ServiceName:  "sshd",
-			ShouldRun:    true,
-			Description:  "SSH daemon - secure remote access barrier",
-			Severity:     SeverityHigh,
-			References:   []string{"CIS 5.2.1"},
-			ThreatLevel:  "SECURED",
-			Exploitable:  false,
-			AttackVector: "properly configured SSH is secure",
+			ServiceName: "rpcbind", // RPC portmapper, often needed by NFS but risky
+			ShouldRun:   false,
+			Description: "RPCbind service is often unnecessary and can be exploited. Disable if not required (e.g., by NFS).",
+			Severity:    SeverityMedium,
+			References:  []string{"CIS 2.2.8"}, // Example reference
+			Exploitable: true,
 		},
 		{
-			ServiceName:  "ntp",
-			ShouldRun:    true,
-			Description:  "Network Time Protocol - temporal sync barrier",
-			Severity:     SeverityMedium,
-			References:   []string{"CIS 2.2.1.1"},
-			ThreatLevel:  "TIME_SYNC",
-			Exploitable:  false,
-			AttackVector: "time-based attacks without sync",
+			ServiceName: "vsftpd", // Example FTP server
+			ShouldRun:   false,
+			Description: "FTP servers transmit credentials and data in plaintext. Use SFTP (via SSH) instead.",
+			Severity:    SeverityHigh,
+			References:  []string{"Security Best Practice"},
+			Exploitable: true,
+		},
+
+		// --- Required Services (ShouldRun: true) ---
+		{
+			ServiceName: "sshd", // Or ssh.service depending on distro naming
+			ShouldRun:   true,
+			Description: "SSH Daemon (sshd) provides secure, encrypted remote access.",
+			Severity:    SeverityHigh, // High severity if NOT running/enabled on a server needing remote access
+			References:  []string{"CIS 5.2.1"},
+			Exploitable: false, // Not running isn't exploitable, it's an availability issue
 		},
 		{
-			ServiceName:  "chronyd",
-			ShouldRun:    true,
-			Description:  "Chrony time daemon - alternative temporal barrier",
-			Severity:     SeverityMedium,
-			References:   []string{"CIS 2.2.1.2"},
-			ThreatLevel:  "TIME_SYNC",
-			Exploitable:  false,
-			AttackVector: "time-based attacks without sync",
+			ServiceName: "auditd",
+			ShouldRun:   true,
+			Description: "Linux Audit Daemon (auditd) is crucial for security logging, monitoring, and forensics.",
+			Severity:    SeverityHigh,
+			References:  []string{"CIS 4.1.1.1"},
+			Exploitable: false, // Lack of logging aids attackers post-compromise
 		},
-		{
-			ServiceName:  "auditd",
-			ShouldRun:    true,
-			Description:  "Audit daemon - forensic logging barrier",
-			Severity:     SeverityHigh,
-			References:   []string{"CIS 4.1.1.1"},
-			ThreatLevel:  "LOGGING",
-			Exploitable:  false,
-			AttackVector: "evidence tampering without auditing",
-		},
-		{
-			ServiceName:  "fail2ban",
-			ShouldRun:    true,
-			Description:  "Intrusion prevention system - active defense barrier",
-			Severity:     SeverityMedium,
-			References:   []string{"Security Best Practice"},
-			ThreatLevel:  "ACTIVE_DEFENSE",
-			Exploitable:  false,
-			AttackVector: "brute force attacks",
-		},
+		// Example: Require rsyslog or syslog-ng
+		// {
+		//     ServiceName: "rsyslog",
+		//     ShouldRun:   true,
+		//     Description: "System logging daemon (rsyslog) is essential for collecting system and application logs.",
+		//     Severity:    SeverityMedium,
+		//     References:  []string{"CIS 4.2.1.1"},
+		//     Exploitable: false,
+		// },
+		// Example: Require chrony or ntp
+		// {
+		//     ServiceName: "chronyd", // Or ntpd
+		//     ShouldRun:   true,
+		//     Description: "Network Time Protocol daemon (chronyd/ntpd) is essential for accurate time synchronization, important for logs and security protocols.",
+		//     Severity:    SeverityMedium,
+		//     References:  []string{"CIS 2.2.1.2"},
+		//     Exploitable: false, // Inaccurate time can cause issues
+		// },
 	}
 }
 
-// performAdvancedICEAnalysis conducts deep ICE system analysis
-func (ic *ICEChecker) performAdvancedICEAnalysis(results *Results) {
-	ic.logger.Debug("Performing advanced ICE barrier analysis...")
-
-	// Analyze listening ports and services
-	ic.analyzeNetworkListeners(results)
-
-	// Check for service dependencies
-	ic.analyzeServiceDependencies(results)
-
-	// Detect unusual service configurations
-	ic.detectUnusualConfigurations(results)
-}
-
-// analyzeNetworkListeners checks for services listening on network ports
-func (ic *ICEChecker) analyzeNetworkListeners(results *Results) {
-	output, err := utils.ExecuteCommand("ss", "-tuln")
-	if err != nil {
-		output, err = utils.ExecuteCommand("netstat", "-tuln")
-		if err != nil {
-			return
-		}
-	}
-
-	lines := strings.Split(output, "\n")
-	listeners := make(map[string][]string)
-
-	for _, line := range lines {
-		if strings.Contains(line, "LISTEN") || strings.Contains(line, "State") {
-			fields := strings.Fields(line)
-			if len(fields) >= 4 {
-				proto := fields[0]
-				address := fields[3]
-				listeners[proto] = append(listeners[proto], address)
-			}
-		}
-	}
-
-	// Analyze suspicious ports
-	suspiciousPorts := []string{":23", ":513", ":514", ":515", ":512", ":1999", ":31337", ":12345"}
-
-	for proto, addresses := range listeners {
-		for _, addr := range addresses {
-			for _, suspPort := range suspiciousPorts {
-				if strings.Contains(addr, suspPort) {
-					finding := &Finding{
-						ID:          fmt.Sprintf("ICE_SUSPICIOUS_PORT_%x", sha256.Sum256([]byte(addr))),
-						Title:       fmt.Sprintf("Suspicious port listener detected"),
-						Description: fmt.Sprintf("Service listening on suspicious port: %s (%s)", addr, proto),
-						Severity:    SeverityHigh,
-						Status:      StatusFail,
-						Expected:    "no suspicious listeners",
-						Actual:      fmt.Sprintf("%s listening on %s", proto, addr),
-						Category:    "ICE Barriers",
-						Exploitable: true,
-					}
-					results.AddFinding(finding)
-				}
-			}
-		}
-	}
-}
-
-// detectBackdoorServices looks for potential backdoor services
-func (ic *ICEChecker) detectBackdoorServices(results *Results) {
-	backdoorNames := []string{
-		"backdoor", "rootkit", "nc", "netcat", "socat",
-		"cryptcat", "reverse", "shell", "bind", "trojan",
-	}
-
-	processes, err := utils.ExecuteCommand("ps", "aux")
-	if err != nil {
-		return
-	}
-
-	lines := strings.Split(processes, "\n")
-	for _, line := range lines {
-		processLower := strings.ToLower(line)
-		for _, backdoor := range backdoorNames {
-			if strings.Contains(processLower, backdoor) &&
-				!strings.Contains(processLower, "grep") {
-				finding := &Finding{
-					ID:          fmt.Sprintf("ICE_BACKDOOR_%x", sha256.Sum256([]byte(line))),
-					Title:       "Potential backdoor process detected",
-					Description: "Suspicious process name suggests backdoor activity",
-					Severity:    SeverityCritical,
-					Status:      StatusFail,
-					Expected:    "no backdoor processes",
-					Actual:      line,
-					Category:    "ICE Barriers",
-					Exploitable: true,
-				}
-				results.AddFinding(finding)
-				break
-			}
-		}
-	}
-}
-
-// detectProcessHollowing checks for process hollowing indicators
-func (ic *ICEChecker) detectProcessHollowing(results *Results) {
-	// Check for processes with suspicious memory mappings
-	processes, err := utils.ExecuteCommand("ps", "-eo", "pid,comm,cmd")
-	if err != nil {
-		return
-	}
-
-	lines := strings.Split(processes, "\n")
-	for i, line := range lines {
-		if i == 0 || strings.TrimSpace(line) == "" {
-			continue
-		}
-
-		fields := strings.Fields(line)
-		if len(fields) >= 2 {
-			pid := fields[0]
-			comm := fields[1]
-
-			// Check if process name differs significantly from command
-			if len(fields) >= 3 {
-				cmd := strings.Join(fields[2:], " ")
-				if !strings.Contains(cmd, comm) && comm != "[" && !strings.HasPrefix(comm, "[") {
-					finding := &Finding{
-						ID:          fmt.Sprintf("ICE_PROCESS_HOLLOW_%s", pid),
-						Title:       fmt.Sprintf("Potential process hollowing: PID %s", pid),
-						Description: "Process name doesn't match command - possible hollowing",
-						Severity:    SeverityHigh,
-						Status:      StatusWarn,
-						Expected:    "process name matches command",
-						Actual:      fmt.Sprintf("comm: %s, cmd: %s", comm, cmd),
-						Category:    "ICE Barriers",
-						Exploitable: true,
-					}
-					results.AddFinding(finding)
-				}
-			}
-		}
-	}
-}
-
-// analyzeServiceDependencies checks service dependency chains
-func (ic *ICEChecker) analyzeServiceDependencies(results *Results) {
-	// This is a placeholder for service dependency analysis
-	// Would require parsing systemctl list-dependencies output
-
-	finding := &Finding{
-		ID:          "ICE_DEPENDENCY_ANALYSIS",
-		Title:       "ICE barrier dependency analysis",
-		Description: "Service dependency chain security assessment",
-		Severity:    SeverityInfo,
-		Status:      StatusInfo,
-		Expected:    "minimal dependencies",
-		Actual:      "requires detailed analysis",
-		Category:    "ICE Barriers",
-	}
-	results.AddFinding(finding)
-}
-
-// detectUnusualConfigurations checks for suspicious service configurations
-func (ic *ICEChecker) detectUnusualConfigurations(results *Results) {
-	// Check for services running as root unnecessarily
-	processes, err := utils.ExecuteCommand("ps", "-eo", "user,pid,comm")
-	if err != nil {
-		return
-	}
-
-	rootProcesses := 0
-	lines := strings.Split(processes, "\n")
-
-	for i, line := range lines {
-		if i == 0 {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) >= 3 && fields[0] == "root" {
-			rootProcesses++
-		}
-	}
-
-	status := StatusInfo
-	if rootProcesses > 50 {
-		status = StatusWarn
-	}
-
-	finding := &Finding{
-		ID:          "ICE_ROOT_PROCESSES",
-		Title:       fmt.Sprintf("Root processes running: %d", rootProcesses),
-		Description: "Number of processes running with root privileges",
-		Severity:    SeverityLow,
-		Status:      status,
-		Expected:    "minimal root processes",
-		Actual:      fmt.Sprintf("%d root processes", rootProcesses),
-		Category:    "ICE Barriers",
-	}
-	results.AddFinding(finding)
-}
-
-// getICERemediation returns remediation for ICE barrier issues
-func (ic *ICEChecker) getICERemediation(serviceName string, shouldRun bool, attackVector string) string {
+// getServiceRemediation returns remediation instructions for service issues
+func (sc *ServicesChecker) getServiceRemediation(serviceName string, shouldRun bool) string {
 	if shouldRun {
-		return fmt.Sprintf(`◢◤ ICE BARRIER ACTIVATION:
-┌─ Enable: systemctl enable %s
-├─ Start: systemctl start %s
-├─ Verify: systemctl status %s
-└─ Monitor: journalctl -u %s -f`,
-			serviceName, serviceName, serviceName, serviceName)
+		// Remediation for a required service that is not running/enabled
+		return fmt.Sprintf(
+			"Service '%s' is required but is inactive or disabled.\nTo fix: Run 'sudo systemctl enable --now %s' to enable and start it.",
+			serviceName, serviceName)
 	} else {
-		return fmt.Sprintf(`◢◤ ICE BARRIER DEACTIVATION:
-┌─ Stop: systemctl stop %s
-├─ Disable: systemctl disable %s
-├─ Mask: systemctl mask %s
-├─ Verify: systemctl is-active %s
-└─ Attack Vector Blocked: %s`,
-			serviceName, serviceName, serviceName, serviceName, attackVector)
+		// Remediation for a prohibited service that is running/enabled
+		return fmt.Sprintf(
+			"Service '%s' is prohibited or unnecessary and is active or enabled.\nTo fix: Run 'sudo systemctl disable --now %s' to disable and stop it.",
+			serviceName, serviceName)
 	}
 }

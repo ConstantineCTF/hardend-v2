@@ -3,14 +3,8 @@
 
 application:
   name: "hardend"
-  version: "2077.1.0"
+  version: "2.0.0"
   description: "Linux Security Hardening Assessment Tool"
-
-# User interface settings
-interface:
-  colors: true
-  animations: true
-  detailed_output: false
 
 # Kernel security parameters to assess
 kernel_parameters:
@@ -65,6 +59,8 @@ services:
       description: "System audit daemon for security logging"
 
 # SSH security configuration checks
+# NOTE: The current ssh.go file uses hard-coded rules.
+# A future improvement is to make it read from this section.
 ssh_security:
   config_file: "/etc/ssh/sshd_config"
   parameters:
@@ -118,39 +114,31 @@ output:
   default_format: "table"
   include_passed: false
   show_exploitable_only: false
-  color_output: true
   verbose_remediation: true
 
 # Scanning configuration
 scanning:
   stealth_mode: false
-  advanced_analysis: true
+  advanced_analysis: true # Note: 'advanced' logic was removed from ssh.go for simplicity
   deep_scan: true
   skip_harmless: false
 
-# Threat assessment settings
-threat_assessment:
-  calculate_scores: true
-  include_attack_vectors: true
-  generate_remediation_plan: true
-  assess_exploitability: true
-
 # Security modules to scan
 scan_modules:
-  kernel: true         # Kernel parameters & memory protection
-  services: true       # Services & daemon analysis
-  ssh: true            # SSH security analysis
-  filesystem: true     # Filesystem security
-  network: false       # Network configuration (not implemented)
-  users: false         # User access control (not implemented)
-  permissions: false   # File permissions (not implemented)
-  suid: false          # SUID/SGID binaries (not implemented)
-  packages: false      # Software vulnerabilities (not implemented)
-  logs: false          # Audit logs (not implemented)
-  firewall: false      # Firewall rules (not implemented)
-  selinux: false       # SELinux/AppArmor (not implemented)
-  cron: false          # Scheduled tasks (not implemented)
-  boot: false          # Boot security (not implemented)
+  kernel: true
+  services: true
+  ssh: true
+  filesystem: true
+  network: false        # Future work
+  users: false          # Future work
+  permissions: false    # Future work
+  suid: false           # Future work
+  packages: false       # Future work
+  logs: false           # Future work
+  firewall: false       # Future work
+  selinux: false        # Future work
+  cron: false           # Future work
+  boot: false           # Future work
 
 # Reporting settings
 reporting:

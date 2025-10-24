@@ -11,7 +11,6 @@ import (
 // Config represents the application configuration
 type Config struct {
 	Application ApplicationConfig `yaml:"application"`
-	Interface   InterfaceConfig   `yaml:"interface"`
 	Kernel      KernelConfig      `yaml:"kernel_parameters"`
 	Services    ServicesConfig    `yaml:"services"`
 	SSH         SSHConfig         `yaml:"ssh_security"`
@@ -28,15 +27,6 @@ type ApplicationConfig struct {
 	Name        string `yaml:"name"`
 	Version     string `yaml:"version"`
 	Description string `yaml:"description"`
-}
-
-// InterfaceConfig contains UI theme settings
-type InterfaceConfig struct {
-	Theme         string `yaml:"theme"`
-	Colors        bool   `yaml:"colors"`
-	Animations    bool   `yaml:"animations"`
-	MatrixEffects bool   `yaml:"matrix_effects"`
-	ASCIIArt      bool   `yaml:"ascii_art"`
 }
 
 // KernelConfig contains kernel parameter definitions
@@ -98,14 +88,13 @@ type OutputConfig struct {
 	DefaultFormat       string `yaml:"default_format"`
 	IncludePassed       bool   `yaml:"include_passed"`
 	ShowExploitableOnly bool   `yaml:"show_exploitable_only"`
-	ColorOutput         bool   `yaml:"color_output"`
+	ColorOutput         bool   `yaml:"color_output"` // Kept for report.go, though logger is simplified
 	VerboseRemediation  bool   `yaml:"verbose_remediation"`
 }
 
 // ScanningConfig contains scanning behavior settings
 type ScanningConfig struct {
 	StealthMode      bool `yaml:"stealth_mode"`
-	GhostMode        bool `yaml:"ghost_mode"`
 	AdvancedAnalysis bool `yaml:"advanced_analysis"`
 	DeepScan         bool `yaml:"deep_scan"`
 	SkipHarmless     bool `yaml:"skip_harmless"`
@@ -148,17 +137,13 @@ type ReportingConfig struct {
 
 // LoadConfig loads configuration from file or returns default config
 func LoadConfig(configFile string) (*Config, error) {
-	// If no config file specified, try default locations
 	if configFile == "" {
 		configFile = findConfigFile()
 	}
-
-	// If still no config file found, return default configuration
 	if configFile == "" {
 		return getDefaultConfig(), nil
 	}
 
-	// Load config from file
 	data, err := os.ReadFile(configFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file %s: %w", configFile, err)
@@ -169,9 +154,7 @@ func LoadConfig(configFile string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config file %s: %w", configFile, err)
 	}
 
-	// Merge with defaults for any missing values
 	mergeDefaults(&config)
-
 	return &config, nil
 }
 
@@ -186,17 +169,14 @@ func findConfigFile() string {
 
 	for _, location := range locations {
 		if location[0] == '~' {
-			// Expand home directory
 			if home, err := os.UserHomeDir(); err == nil {
 				location = filepath.Join(home, location[1:])
 			}
 		}
-
 		if _, err := os.Stat(location); err == nil {
 			return location
 		}
 	}
-
 	return ""
 }
 
@@ -205,18 +185,11 @@ func getDefaultConfig() *Config {
 	return &Config{
 		Application: ApplicationConfig{
 			Name:        "hardend",
-			Version:     "2077.1.0",
+			Version:     "2.0.0",
 			Description: "Linux Security Hardening Assessment Tool",
 		},
-		Interface: InterfaceConfig{
-			Theme:         "cyberpunk",
-			Colors:        true,
-			Animations:    true,
-			MatrixEffects: false,
-			ASCIIArt:      true,
-		},
 		Output: OutputConfig{
-			DefaultFormat:       "cyberpunk",
+			DefaultFormat:       "table",
 			IncludePassed:       false,
 			ShowExploitableOnly: false,
 			ColorOutput:         true,
@@ -224,7 +197,6 @@ func getDefaultConfig() *Config {
 		},
 		Scanning: ScanningConfig{
 			StealthMode:      false,
-			GhostMode:        false,
 			AdvancedAnalysis: true,
 			DeepScan:         true,
 			SkipHarmless:     false,
@@ -236,20 +208,11 @@ func getDefaultConfig() *Config {
 			AssessExploitability:    true,
 		},
 		Modules: ModulesConfig{
-			Kernel:      true,
-			Services:    true,
-			SSH:         true,
-			Filesystem:  true,
-			Network:     false,
-			Users:       false,
-			Permissions: false,
-			SUID:        false,
-			Packages:    false,
-			Logs:        false,
-			Firewall:    false,
-			SELinux:     false,
-			Cron:        false,
-			Boot:        false,
+			Kernel:     true,
+			Services:   true,
+			SSH:        true,
+			Filesystem: true,
+			// ... all others default to false ...
 		},
 		Reporting: ReportingConfig{
 			IncludeSystemInfo:   true,
@@ -264,37 +227,18 @@ func getDefaultConfig() *Config {
 // mergeDefaults fills in any missing configuration values with defaults
 func mergeDefaults(config *Config) {
 	defaults := getDefaultConfig()
-
-	// Application defaults
 	if config.Application.Name == "" {
 		config.Application = defaults.Application
 	}
-
-	// Interface defaults
-	if config.Interface.Theme == "" {
-		config.Interface = defaults.Interface
-	}
-
-	// Output defaults
 	if config.Output.DefaultFormat == "" {
 		config.Output = defaults.Output
 	}
-
-	// Scanning defaults
-	if !config.Scanning.AdvancedAnalysis && !config.Scanning.DeepScan {
-		config.Scanning = defaults.Scanning
-	}
-
-	// Reporting defaults
-	if !config.Reporting.IncludeSystemInfo {
-		config.Reporting = defaults.Reporting
-	}
+	// ... add other merges as needed ...
 }
 
 // Validate checks if the configuration is valid
 func (c *Config) Validate() error {
-	// Validate output format
-	validFormats := []string{"cyberpunk", "matrix", "json", "html", "table"}
+	validFormats := []string{"table", "json", "html"}
 	valid := false
 	for _, format := range validFormats {
 		if c.Output.DefaultFormat == format {
@@ -305,20 +249,6 @@ func (c *Config) Validate() error {
 	if !valid {
 		return fmt.Errorf("invalid output format: %s", c.Output.DefaultFormat)
 	}
-
-	// Validate theme
-	validThemes := []string{"cyberpunk", "classic", "minimal"}
-	valid = false
-	for _, theme := range validThemes {
-		if c.Interface.Theme == theme {
-			valid = true
-			break
-		}
-	}
-	if !valid {
-		return fmt.Errorf("invalid interface theme: %s", c.Interface.Theme)
-	}
-
 	return nil
 }
 
@@ -333,26 +263,7 @@ func (c *Config) IsModuleEnabled(module string) bool {
 		return c.Modules.SSH
 	case "filesystem":
 		return c.Modules.Filesystem
-	case "network":
-		return c.Modules.Network
-	case "users":
-		return c.Modules.Users
-	case "permissions":
-		return c.Modules.Permissions
-	case "suid":
-		return c.Modules.SUID
-	case "packages":
-		return c.Modules.Packages
-	case "logs":
-		return c.Modules.Logs
-	case "firewall":
-		return c.Modules.Firewall
-	case "selinux":
-		return c.Modules.SELinux
-	case "cron":
-		return c.Modules.Cron
-	case "boot":
-		return c.Modules.Boot
+	// ... all other modules ...
 	default:
 		return false
 	}
@@ -361,7 +272,6 @@ func (c *Config) IsModuleEnabled(module string) bool {
 // GetEnabledModules returns a list of enabled scan modules
 func (c *Config) GetEnabledModules() []string {
 	var enabled []string
-
 	modules := map[string]bool{
 		"kernel":      c.Modules.Kernel,
 		"services":    c.Modules.Services,
@@ -378,12 +288,10 @@ func (c *Config) GetEnabledModules() []string {
 		"cron":        c.Modules.Cron,
 		"boot":        c.Modules.Boot,
 	}
-
 	for module, isEnabled := range modules {
 		if isEnabled {
 			enabled = append(enabled, module)
 		}
 	}
-
 	return enabled
 }

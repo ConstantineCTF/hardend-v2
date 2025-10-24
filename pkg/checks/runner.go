@@ -8,17 +8,15 @@ import (
 	"time"
 
 	"github.com/ConstantineCTF/hardend/pkg/config"
-	"github.com/ConstantineCTF/hardend/pkg/utils"
-	"github.com/fatih/color"
+	"github.com/ConstantineCTF/hardend/pkg/utils" // Ensure this import path is correct
 )
 
-// Runner orchestrates all cyberpunk security checks with neural interface
+// Runner orchestrates all security checks
 type Runner struct {
-	config    *config.Config
-	logger    *utils.CyberpunkLogger
-	stealth   bool
-	ghostMode bool
-	checkers  map[string]Checker
+	config   *config.Config
+	logger   *utils.Logger // Corrected: Use Logger
+	stealth  bool
+	checkers map[string]Checker
 }
 
 // Checker interface for all security check modules
@@ -26,144 +24,181 @@ type Checker interface {
 	RunChecks(results *Results) error
 }
 
-// NewRunner creates a new cyberpunk security check runner
-func NewRunner(cfg *config.Config, verbose, stealth, ghostMode bool) *Runner {
+// NewRunner creates a new security check runner
+func NewRunner(cfg *config.Config, verbose, stealth bool) *Runner {
 	r := &Runner{
-		config:    cfg,
-		logger:    utils.NewCyberpunkLogger(verbose, stealth),
-		stealth:   stealth,
-		ghostMode: ghostMode,
-		checkers:  make(map[string]Checker),
+		config:   cfg,
+		logger:   utils.NewLogger(verbose, stealth), // Corrected: Use NewLogger
+		stealth:  stealth,
+		checkers: make(map[string]Checker),
 	}
 
-	// Initialize all cyberpunk checkers
-	r.checkers["neural"] = NewNeuralChecker(verbose, stealth, ghostMode)
-	r.checkers["ice"] = NewICEChecker(verbose, stealth, ghostMode)
-	r.checkers["ghost"] = NewGhostChecker(verbose, stealth, ghostMode)
-	r.checkers["matrix"] = NewMatrixChecker(verbose, stealth, ghostMode)
+	// Initialize all checkers using corrected names and passing config flags
+	advanced := cfg.Scanning.AdvancedAnalysis
+	if cfg.IsModuleEnabled("kernel") {
+		r.checkers["kernel"] = NewKernelChecker(verbose, stealth, advanced)
+	}
+	if cfg.IsModuleEnabled("services") {
+		r.checkers["services"] = NewServicesChecker(verbose, stealth, advanced)
+	}
+	if cfg.IsModuleEnabled("ssh") {
+		// SSH checker doesn't currently use 'advanced' flag internally in refactored version
+		r.checkers["ssh"] = NewSSHChecker(verbose, stealth)
+	}
+	if cfg.IsModuleEnabled("filesystem") {
+		r.checkers["filesystem"] = NewFilesystemChecker(verbose, stealth, advanced)
+	}
 
-	// TODO: Initialize remaining checkers
-	// r.checkers["net"] = NewNetChecker(verbose, stealth, ghostMode)
-	// r.checkers["users"] = NewUsersChecker(verbose, stealth, ghostMode)
-	// r.checkers["perms"] = NewPermsChecker(verbose, stealth, ghostMode)
-	// r.checkers["suid"] = NewSUIDChecker(verbose, stealth, ghostMode)
-	// r.checkers["packages"] = NewPackagesChecker(verbose, stealth, ghostMode)
-	// r.checkers["logs"] = NewLogsChecker(verbose, stealth, ghostMode)
-	// r.checkers["firewall"] = NewFirewallChecker(verbose, stealth, ghostMode)
-	// r.checkers["selinux"] = NewSELinuxChecker(verbose, stealth, ghostMode)
-	// r.checkers["cron"] = NewCronChecker(verbose, stealth, ghostMode)
-	// r.checkers["boot"] = NewBootChecker(verbose, stealth, ghostMode)
+	// TODO: Initialize remaining checkers as they are built and enabled in config
+	// if cfg.IsModuleEnabled("network") {
+	//     r.checkers["network"] = NewNetworkChecker(verbose, stealth, advanced)
+	// }
+	// if cfg.IsModuleEnabled("users") {
+	//     r.checkers["users"] = NewUsersChecker(verbose, stealth, advanced)
+	// }
+	// ... etc.
 
+	r.logger.Debug("Initialized checkers for enabled modules.")
 	return r
 }
 
-// RunFullPenetrationSuite executes comprehensive security penetration testing
+// RunFullPenetrationSuite executes all security checks enabled in the configuration
 func (r *Runner) RunFullPenetrationSuite() (*Results, error) {
-	scanTypes := []string{"neural", "ice", "ghost", "matrix"}
+	// Get all enabled modules directly from the initialized checkers map keys
+	scanTypes := make([]string, 0, len(r.checkers))
+	for k := range r.checkers {
+		scanTypes = append(scanTypes, k)
+	}
+	r.logger.Info("Running full assessment suite for modules: %v", scanTypes)
 	return r.RunSelectedScans(scanTypes, r.stealth)
 }
 
-// RunSelectedScans executes specific security scans with cyberpunk styling
+// RunSelectedScans executes specific security scans if they are initialized
 func (r *Runner) RunSelectedScans(scanTypes []string, stealthMode bool) (*Results, error) {
 	startTime := time.Now()
 
-	// Initialize results with cyberpunk neural interface
 	results := &Results{
-		SystemInfo: r.getNeuralSystemInfo(),
+		SystemInfo: r.getSystemInfo(),
 		Findings:   make([]*Finding, 0),
-		Summary:    Summary{},
+		Summary:    Summary{}, // Initialize summary counters to zero
 		StartTime:  startTime,
 	}
 
-	r.logger.Info("◢◤ Neural interface initialized - beginning penetration protocol")
-	r.logger.Info("◢◤ Target system: %s (%s %s)", results.SystemInfo.Hostname,
+	r.logger.Info("Starting security assessment...")
+	r.logger.Info("Target system: %s (%s %s)", results.SystemInfo.Hostname,
 		results.SystemInfo.OS, results.SystemInfo.Architecture)
 
-	if r.ghostMode {
-		r.logger.Info("◢◤ Ghost in the shell mode activated")
-		utils.MatrixEffect(1 * time.Second)
-	}
-
-	// Execute security scans in cyberpunk style
+	// Execute security scans
+	executedCount := 0
 	for _, scanType := range scanTypes {
 		checker, exists := r.checkers[scanType]
 		if !exists {
-			r.logger.Warning("Unknown scan module '%s' - neural pathway not found", scanType)
+			// This case should ideally not happen if scanTypes comes from initialized checkers,
+			// but handle defensively if user provided invalid types via flags.
+			r.logger.Warning("Scan module '%s' is not available or enabled - skipping.", scanType)
 			continue
 		}
 
-		r.logger.Info("◢◤ Initializing %s security protocol...", strings.ToUpper(scanType))
+		scanName := r.getScanDisplayName(scanType)
+		r.logger.Info("Executing %s scan...", scanName)
 
-		if !r.stealth {
-			// Show scanning animation
-			scanName := r.getScanDisplayName(scanType)
-			utils.ProgressBar(fmt.Sprintf("Executing %s scan", scanName),
-				time.Duration(500+len(scanType)*100)*time.Millisecond)
+		// Run the checks for the module
+		err := checker.RunChecks(results)
+		executedCount++
+
+		if err != nil {
+			// Log the error returned by the checker's RunChecks method
+			r.logger.Error("Error during %s scan: %v", scanType, err)
+			// Decide if error should halt execution or just be logged
+			// For now, continue with other checks
+			// Optionally add a finding about the module failure
+			moduleErrorFinding := &Finding{
+				ID:          fmt.Sprintf("MODULE_ERROR_%s", strings.ToUpper(scanType)),
+				Title:       fmt.Sprintf("Error executing %s module", scanName),
+				Description: fmt.Sprintf("The %s scan failed to complete: %v", scanName, err),
+				Severity:    SeverityHigh, // Module failure is usually significant
+				Status:      StatusSkip,
+				Category:    "Assessment Framework",
+			}
+			results.AddFinding(moduleErrorFinding)
+			continue // Continue to next module
 		}
 
-		// Execute the security check
-		if err := checker.RunChecks(results); err != nil {
-			r.logger.Error("Neural pathway error in %s scanner: %v", scanType, err)
-			continue
-		}
-
-		r.logger.Debug("◢◤ %s scan completed successfully", strings.ToUpper(scanType))
+		r.logger.Debug("%s scan completed successfully.", scanName)
 	}
 
-	// Finalize results with neural processing
+	// Finalize results
 	endTime := time.Now()
 	results.EndTime = endTime
-	results.Duration = endTime.Sub(startTime).String()
+	results.Duration = endTime.Sub(startTime).Round(time.Millisecond).String() // Nicer duration format
 
-	// Perform final threat assessment
-	r.performThreatAssessment(results)
-
-	r.logger.Info("◢◤ Penetration testing complete - %d vulnerabilities identified", len(results.Findings))
-	r.logger.Info("◢◤ Assessment duration: %s", results.Duration)
+	r.logger.Info("Assessment complete. %d modules executed.", executedCount)
+	r.logger.Info("Total findings: %d (Critical: %d, High: %d, Medium: %d, Low: %d)",
+		results.Summary.FailedChecks+results.Summary.WarningChecks, // Approx total issues
+		results.Summary.CriticalIssues, results.Summary.HighIssues,
+		results.Summary.MediumIssues, results.Summary.LowIssues)
+	r.logger.Info("Assessment duration: %s", results.Duration)
 
 	if results.HasCriticalVulnerabilities() && !r.stealth {
-		r.logger.Critical("CRITICAL VULNERABILITIES DETECTED - IMMEDIATE ACTION REQUIRED")
-		// Add glitch effect for critical issues
-		color.New(color.FgRed, color.Bold, color.BlinkRapid).Printf("    ◢◤ SYSTEM COMPROMISED ◢◤\n")
+		// Use logger.Error or logger.Critical for consistency
+		r.logger.Error("CRITICAL VULNERABILITIES DETECTED - Review report for immediate action.")
+	} else if results.Summary.FailedChecks > 0 && !r.stealth {
+		r.logger.Warning("%d failed checks detected. Review report.", results.Summary.FailedChecks)
 	}
 
 	return results, nil
 }
 
-// getNeuralSystemInfo gathers comprehensive system intelligence
-func (r *Runner) getNeuralSystemInfo() SystemInfo {
-	hostname, osType, arch := utils.GetSystemInfo()
+// getSystemInfo gathers comprehensive system information using utils
+func (r *Runner) getSystemInfo() SystemInfo {
+	hostname, osName, arch := utils.GetSystemInfo()
+	kernel := utils.GetKernelVersion()
 
-	// Get enhanced system information
-	kernel := "unknown"
-	if output, err := utils.ExecuteCommand("uname", "-r"); err == nil {
-		kernel = strings.TrimSpace(output)
-	}
+	// Attempt to get more specific OS Name/Version if possible (requires more complex parsing)
+	// For now, osName from utils.GetSystemInfo() might just be "linux"
+	fullOSName := osName // Placeholder, could try reading /etc/os-release
 
-	uptime := "unknown"
+	var uptime string
 	if r.stealth {
-		// In stealth mode, try to get uptime without leaving traces
+		// Try reading /proc/uptime stealthily
 		if output, err := utils.StealthExecute("cat", "/proc/uptime"); err == nil {
 			fields := strings.Fields(output)
 			if len(fields) > 0 {
-				uptime = fmt.Sprintf("%.0f seconds", parseFloat(fields[0]))
+				uptimeSec, _ := strconv.ParseFloat(fields[0], 64)
+				// Format duration more nicely
+				uptimeDur := time.Duration(uptimeSec) * time.Second
+				uptime = uptimeDur.String() // e.g., "1h2m3.456s"
 			}
 		}
 	} else {
+		// Use 'uptime -p' for pretty format if available
 		if output, err := utils.ExecuteCommand("uptime", "-p"); err == nil {
 			uptime = strings.TrimSpace(output)
+		} else {
+			// Fallback to standard uptime output if -p fails
+			if output, err := utils.ExecuteCommand("uptime"); err == nil {
+				uptime = strings.TrimSpace(output)
+			}
 		}
 	}
+	if uptime == "" {
+		uptime = "unknown"
+	}
 
-	// Get additional neural interface data
 	loadAvg := "unknown"
-	if output, err := utils.GetSystemLoad(); err == nil {
-		loadAvg = strings.TrimSpace(output)
+	// GetSystemLoad currently calls `uptime`, maybe parse specifically for load
+	// Example parsing (simplified):
+	if uptimeOutput, err := utils.GetSystemLoad(); err == nil {
+		if idx := strings.Index(uptimeOutput, "load average:"); idx != -1 {
+			loadAvg = strings.TrimSpace(uptimeOutput[idx+len("load average:"):])
+		} else {
+			loadAvg = "(Could not parse)"
+		}
 	}
 
 	return SystemInfo{
 		Hostname:     hostname,
-		OS:           osType,
+		OS:           fullOSName, // Use potentially enhanced OS name
 		Kernel:       kernel,
 		Architecture: arch,
 		Uptime:       uptime,
@@ -173,157 +208,91 @@ func (r *Runner) getNeuralSystemInfo() SystemInfo {
 	}
 }
 
-// getMemoryInfo retrieves system memory information
+// getMemoryInfo retrieves system memory information from /proc/meminfo or 'free'
 func (r *Runner) getMemoryInfo() string {
-	if r.stealth {
-		// Read /proc/meminfo in stealth mode
-		if content, err := utils.ReadLines("/proc/meminfo"); err == nil {
-			for _, line := range content {
-				if strings.HasPrefix(line, "MemTotal:") {
-					return strings.TrimSpace(line)
+	memTotal := "unknown"
+	memFree := "unknown"
+
+	// Prefer reading /proc/meminfo directly as it's often more reliable than parsing 'free'
+	meminfo, err := utils.ReadLines("/proc/meminfo")
+	if err == nil {
+		for _, line := range meminfo {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				key := fields[0]
+				value := fields[1]
+				unit := ""
+				if len(fields) > 2 {
+					unit = fields[2]
+				}
+
+				if key == "MemTotal:" {
+					memTotal = value + " " + unit
+				} else if key == "MemAvailable:" { // Prefer MemAvailable over MemFree
+					memFree = value + " " + unit
+					break // Found both, exit early
+				} else if key == "MemFree:" && memFree == "unknown" { // Fallback to MemFree
+					memFree = value + " " + unit
 				}
 			}
 		}
+		if memTotal != "unknown" && memFree != "unknown" {
+			return fmt.Sprintf("Total: %s / Available: %s", memTotal, memFree)
+		}
 	} else {
+		r.logger.Debug("Could not read /proc/meminfo: %v", err)
+	}
+
+	// Fallback to 'free -h' if /proc/meminfo failed and not in stealth
+	if !r.stealth {
 		if output, err := utils.ExecuteCommand("free", "-h"); err == nil {
 			lines := strings.Split(output, "\n")
 			if len(lines) > 1 {
+				// Try to parse the 'Mem:' line (usually the second line)
+				fields := strings.Fields(lines[1])
+				if len(fields) > 1 && fields[0] == "Mem:" {
+					// Extract Total and Available/Free, indices depend on 'free' version
+					// This is fragile, /proc/meminfo is better
+					if len(fields) >= 7 { // Assuming modern 'free' output
+						return fmt.Sprintf("Total: %s / Available: %s", fields[1], fields[6])
+					} else if len(fields) >= 4 { // Older 'free' might have different columns
+						return fmt.Sprintf("Total: %s / Free: %s", fields[1], fields[3])
+					}
+				}
+				// If parsing fails, return the raw line
 				return strings.TrimSpace(lines[1])
 			}
+		} else {
+			r.logger.Debug("Could not execute 'free -h': %v", err)
 		}
 	}
-	return "unknown"
+
+	return "unknown" // If all methods fail
 }
 
-// performThreatAssessment analyzes overall security posture
-func (r *Runner) performThreatAssessment(results *Results) {
-	r.logger.Debug("◢◤ Performing neural threat assessment...")
-
-	// Calculate threat metrics
-	totalVulns := len(results.Findings)
-	criticalVulns := results.Summary.CriticalIssues
-	highVulns := results.Summary.HighIssues
-
-	// Assess threat level
-	threatLevel := "MINIMAL"
-	if criticalVulns > 0 {
-		threatLevel = "CRITICAL"
-	} else if highVulns > 5 {
-		threatLevel = "HIGH"
-	} else if highVulns > 0 || results.Summary.MediumIssues > 10 {
-		threatLevel = "MODERATE"
-	}
-
-	// Add threat assessment finding
-	finding := &Finding{
-		ID:          "NEURAL_THREAT_ASSESSMENT",
-		Title:       fmt.Sprintf("Overall threat level: %s", threatLevel),
-		Description: fmt.Sprintf("Comprehensive security posture assessment based on %d findings", totalVulns),
-		Severity:    r.getThreatSeverity(threatLevel),
-		Status:      r.getThreatStatus(threatLevel),
-		Expected:    "MINIMAL threat level",
-		Actual:      threatLevel,
-		Category:    "Threat Assessment",
-		Timestamp:   time.Now(),
-	}
-	results.AddFinding(finding)
-
-	// Add system hardening score
-	maxScore := float64(results.Summary.TotalChecks * 100)
-	currentScore := float64(results.Summary.PassedChecks*100 + results.Summary.WarningChecks*50)
-	hardeningScore := currentScore / maxScore * 100
-
-	finding = &Finding{
-		ID:          "NEURAL_HARDENING_SCORE",
-		Title:       fmt.Sprintf("System hardening score: %.1f%%", hardeningScore),
-		Description: "Overall system security hardening effectiveness",
-		Severity:    r.getScoreSeverity(hardeningScore),
-		Status:      r.getScoreStatus(hardeningScore),
-		Expected:    ">= 90% hardening score",
-		Actual:      fmt.Sprintf("%.1f%%", hardeningScore),
-		Category:    "Threat Assessment",
-		Timestamp:   time.Now(),
-	}
-	results.AddFinding(finding)
-}
-
-// getScanDisplayName returns cyberpunk display name for scan type
+// getScanDisplayName returns a professional display name for a scan type
 func (r *Runner) getScanDisplayName(scanType string) string {
+	// Map internal names to user-friendly names
 	displayNames := map[string]string{
-		"neural":   "Neural Pathways",
-		"ice":      "ICE Barriers",
-		"ghost":    "Ghost Protocol",
-		"matrix":   "Filesystem Matrix",
-		"net":      "Network Intrusion",
-		"users":    "User Access Control",
-		"perms":    "Permission Matrix",
-		"suid":     "Privilege Escalation",
-		"packages": "Software Vulnerabilities",
-		"logs":     "Forensic Analysis",
-		"firewall": "Perimeter Defense",
-		"selinux":  "Mandatory Access Control",
-		"cron":     "Scheduled Tasks",
-		"boot":     "Boot Sequence",
+		"kernel":     "Kernel Parameters",
+		"services":   "System Services",
+		"ssh":        "SSH Configuration",
+		"filesystem": "Filesystem Mounts & Modules",
+		"network":    "Network Configuration", // Future
+		"users":      "User Accounts",         // Future
+		"perms":      "File Permissions",      // Future
+		"suid":       "SUID/SGID Binaries",    // Future
+		"packages":   "Installed Packages",    // Future
+		"logs":       "System Logs & Audit",   // Future
+		"firewall":   "Firewall Rules",        // Future
+		"selinux":    "SELinux/AppArmor",      // Future
+		"cron":       "Scheduled Tasks",       // Future
+		"boot":       "Boot Security",         // Future
 	}
 
 	if name, exists := displayNames[scanType]; exists {
 		return name
 	}
-	return strings.ToTitle(scanType)
-}
-
-// Helper functions for threat assessment
-
-func (r *Runner) getThreatSeverity(threatLevel string) Severity {
-	switch threatLevel {
-	case "CRITICAL":
-		return SeverityCritical
-	case "HIGH":
-		return SeverityHigh
-	case "MODERATE":
-		return SeverityMedium
-	default:
-		return SeverityInfo
-	}
-}
-
-func (r *Runner) getThreatStatus(threatLevel string) CheckStatus {
-	switch threatLevel {
-	case "CRITICAL", "HIGH":
-		return StatusFail
-	case "MODERATE":
-		return StatusWarn
-	default:
-		return StatusPass
-	}
-}
-
-func (r *Runner) getScoreSeverity(score float64) Severity {
-	if score < 50 {
-		return SeverityCritical
-	} else if score < 70 {
-		return SeverityHigh
-	} else if score < 85 {
-		return SeverityMedium
-	} else {
-		return SeverityLow
-	}
-}
-
-func (r *Runner) getScoreStatus(score float64) CheckStatus {
-	if score < 70 {
-		return StatusFail
-	} else if score < 85 {
-		return StatusWarn
-	} else {
-		return StatusPass
-	}
-}
-
-// parseFloat safely parses a float string
-func parseFloat(s string) float64 {
-	if val, err := strconv.ParseFloat(s, 64); err == nil {
-		return val
-	}
-	return 0.0
+	// Fallback: Capitalize the internal name
+	return strings.Title(scanType)
 }

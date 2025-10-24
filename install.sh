@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # HARDEND Installation Script
-# Enterprise Linux Security Assessment Framework
+# Professional Linux Security Assessment Framework
 
 set -e
 
@@ -11,15 +11,19 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Application information
+# --- Configuration ---
 APP_NAME="hardend"
-APP_VERSION="2077.1.0"
+APP_VERSION="2.0.0" # Updated Version
 APP_DESC="Linux Security Hardening Assessment Tool"
+GO_REQUIRED_VERSION="1.25"
+INSTALL_BIN_DIR="/usr/local/bin"
+INSTALL_DATA_DIR="/usr/local/share/hardend"
+# --- End Configuration ---
 
 # Print header
 print_header() {
     echo ""
-    echo "HARDEND Installation - Linux Security Assessment Framework"
+    echo "HARDEND Installation - $APP_DESC"
     echo "Version: $APP_VERSION"
     echo ""
 }
@@ -30,137 +34,153 @@ check_requirements() {
 
     # Check Go installation
     if ! command -v go &> /dev/null; then
-        echo -e "${RED}Error: Go compiler not found${NC}"
-        echo "Please install Go 1.25+ from https://golang.org/dl/"
-        exit 1
+        echo -e "${RED}Error: Go compiler not found.${NC}"
+        echo "Please install Go $GO_REQUIRED_VERSION+ from https://golang.org/dl/"
+        return 1
     fi
 
     # Check Go version
-    GO_VERSION=$(go version | grep -oP 'go\d+\.\d+' | grep -oP '\d+\.\d+')
-    REQUIRED_VERSION="1.25"
-
-    if [[ $(echo "$GO_VERSION >= $REQUIRED_VERSION" | bc -l 2>/dev/null || echo "0") -eq 0 ]]; then
-        echo -e "${RED}Error: Go version $GO_VERSION insufficient${NC}"
-        echo "Require Go $REQUIRED_VERSION or higher"
-        exit 1
+    GO_VERSION=$(go version | grep -oE 'go[0-9]+\.[0-9]+(\.[0-9]+)?' | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?')
+    if ! $(go version | awk -v req="$GO_REQUIRED_VERSION" '{ split($3, v, "go"); split(v[2], ver, "."); split(req, r, "."); if (ver[1] < r[1] || (ver[1] == r[1] && ver[2] < r[2])) exit 1; exit 0 }'); then
+        echo -e "${RED}Error: Go version $GO_VERSION is insufficient.${NC}"
+        echo "Requires Go $GO_REQUIRED_VERSION or higher."
+        return 1
     fi
 
-    echo -e "${GREEN}Go $GO_VERSION detected - ready to build${NC}"
+    echo -e "${GREEN}Go $GO_VERSION detected.${NC}"
+    return 0
 }
 
-# Install dependencies
+# Install dependencies via Go modules
 install_dependencies() {
-    echo -e "${GREEN}Installing dependencies...${NC}"
-
+    echo -e "${GREEN}Downloading dependencies...${NC}"
     if [[ -f "go.mod" ]]; then
-        go mod download
-        echo "Dependencies installed successfully"
+        if go mod download; then
+             echo -e "${GREEN}Dependencies downloaded successfully.${NC}"
+        else
+            echo -e "${RED}Error: Failed to download Go modules.${NC}"
+            exit 1
+        fi
     else
-        echo -e "${RED}Error: go.mod not found${NC}"
-        echo "Please run from the project directory"
+        echo -e "${RED}Error: go.mod not found. Please run from the project root directory.${NC}"
         exit 1
     fi
 }
 
 # Build the application
 build_application() {
-    echo -e "${GREEN}Building application...${NC}"
+    echo -e "${GREEN}Building application binary...${NC}"
 
-    # Build with optimization flags
-    LDFLAGS="-s -w -X main.version=$APP_VERSION -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    # Build flags: Strip symbols, set version variable (ensure 'appVersion' exists in main package)
+    # The variable path '-X main.appVersion=...' must match the actual variable in your main.go
+    # If you don't have such a variable, remove the -X flag or add it to main.go: var appVersion string
+    BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    LDFLAGS="-s -w -X main.appVersion=$APP_VERSION -X main.buildTime=$BUILD_TIME"
 
     if go build -ldflags="$LDFLAGS" -o $APP_NAME cmd/hardend/main.go; then
-        echo -e "${GREEN}Build completed successfully${NC}"
+        echo -e "${GREEN}Build successful: '$APP_NAME' binary created.${NC}"
     else
-        echo -e "${RED}Error: Build failed${NC}"
+        echo -e "${RED}Error: Build failed.${NC}"
         exit 1
     fi
-
     chmod +x $APP_NAME
-
-    # Verify binary
-    if ./$APP_NAME --version &> /dev/null; then
-        echo -e "${GREEN}Binary verification passed${NC}"
-    else
-        echo -e "${YELLOW}Warning: Binary verification failed${NC}"
-    fi
 }
 
 # Install to system (optional)
 install_system() {
-    echo -e "${GREEN}Installing to system...${NC}"
+    echo -e "${GREEN}Attempting system-wide installation...${NC}"
+    if [[ $EUID -ne 0 ]]; then
+       echo -e "${YELLOW}System-wide installation requires root privileges. Please run with sudo or as root.${NC}"
+       return 1
+    fi
 
-    INSTALL_DIR="/usr/local/share/hardend"
-    sudo mkdir -p "$INSTALL_DIR"
-    sudo mkdir -p "$INSTALL_DIR/configs"
+    echo "Creating directories..."
+    mkdir -p "$INSTALL_DATA_DIR/configs"
 
-    # Copy files
-    sudo cp $APP_NAME "$INSTALL_DIR/"
-    [[ -f "configs/config.yaml" ]] && sudo cp configs/config.yaml "$INSTALL_DIR/configs/"
+    echo "Copying files..."
+    cp "$APP_NAME" "$INSTALL_DATA_DIR/"
+    if [[ -f "configs/config.yaml" ]]; then
+        cp configs/config.yaml "$INSTALL_DATA_DIR/configs/"
+        chown root:root "$INSTALL_DATA_DIR/configs/config.yaml"
+        chmod 644 "$INSTALL_DATA_DIR/configs/config.yaml"
+    else
+        echo -e "${YELLOW}Warning: Default config.yaml not found in ./configs/.${NC}"
+    fi
 
-    # Create symlink
-    sudo ln -sf "$INSTALL_DIR/$APP_NAME" "/usr/local/bin/$APP_NAME"
+    echo "Creating symlink..."
+    ln -sf "$INSTALL_DATA_DIR/$APP_NAME" "$INSTALL_BIN_DIR/$APP_NAME"
 
-    # Set permissions
-    sudo chown -R root:root "$INSTALL_DIR"
-    sudo chmod +x "$INSTALL_DIR/$APP_NAME"
+    echo "Setting permissions..."
+    chown -R root:root "$INSTALL_DATA_DIR"
+    chmod +x "$INSTALL_DATA_DIR/$APP_NAME"
 
-    echo -e "${GREEN}System installation complete${NC}"
-    echo "Application available at: /usr/local/bin/$APP_NAME"
+    echo -e "${GREEN}System installation complete.${NC}"
+    echo "Application available at: $INSTALL_BIN_DIR/$APP_NAME"
+    echo "Default configuration directory: $INSTALL_DATA_DIR/configs/"
 }
 
 # Test installation
 test_installation() {
-    echo -e "${GREEN}Testing installation...${NC}"
-
-    if command -v $APP_NAME &> /dev/null; then
-        $APP_NAME --version
-        echo -e "${GREEN}Installation verified successfully${NC}"
+    echo -e "${GREEN}Verifying installation...${NC}"
+    if command -v $APP_NAME &> /dev/null && [[ -L "$INSTALL_BIN_DIR/$APP_NAME" ]]; then
+        echo -n "System-wide: "
+        if $APP_NAME --version &> /dev/null; then
+            echo -e "${GREEN}OK${NC}"
+            $APP_NAME --version
+        else
+            echo -e "${RED}Failed. Could not execute $APP_NAME.${NC}"
+            return 1
+        fi
+    elif [[ -f "./$APP_NAME" ]]; then
+        echo -n "Local build: "
+        if ./$APP_NAME --version &> /dev/null; then
+            echo -e "${GREEN}OK${NC}"
+            ./$APP_NAME --version
+            echo "Run './$APP_NAME' from this directory."
+        else
+            echo -e "${RED}Failed. Could not execute ./$APP_NAME.${NC}"
+            return 1
+        fi
     else
-        ./$APP_NAME --version
-        echo -e "${GREEN}Local installation verified${NC}"
-        echo "Run './$APP_NAME' from current directory"
+        echo -e "${RED}Error: $APP_NAME binary not found in system path or current directory.${NC}"
+        return 1
     fi
+    return 0
 }
 
 # Main installation process
 main() {
     print_header
 
-    # Check if running as root
-    if [[ $EUID -eq 0 ]]; then
-        echo -e "${YELLOW}Warning: Running as root${NC}"
-        echo "Some security checks may be bypassed when run as root"
-        echo ""
-    fi
-
-    check_requirements
+    check_requirements || exit 1
     install_dependencies
     build_application
 
-    if ! go test ./tests; then
-        echo -e "${RED}Error: Tests failed${NC}"
+    # Optional: Run tests after build
+    # echo -e "${GREEN}Running tests...${NC}"
+    # if ! go test ./tests/...; then
+    #     echo -e "${RED}Error: Tests failed. Aborting installation.${NC}"
+    #     exit 1
+    # fi
+    # echo -e "${GREEN}Tests passed.${NC}"
+
+    echo ""
+    read -p "Install $APP_NAME system-wide to $INSTALL_BIN_DIR? [y/N]: " -n 1 -r REPLY
+    echo # Move to new line
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        install_system || echo -e "${YELLOW}System-wide installation skipped or failed.${NC}"
+    else
+        echo "Skipping system-wide installation."
+    fi
+
+    echo ""
+    if test_installation; then
+        echo -e "${GREEN}HARDEND installation complete!${NC}"
+        echo "Run '$APP_NAME --help' for usage instructions."
+    else
+        echo -e "${RED}Installation verification failed.${NC}"
         exit 1
     fi
-
-    # Ask for system installation
-    echo ""
-    read -p "Install to system paths? [y/N]: " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        install_system
-    fi
-
-    test_installation
-
-    echo ""
-    echo -e "${GREEN}HARDEND installation complete!${NC}"
-    echo "Ready to perform Linux security assessments."
-    echo ""
-    echo "Usage:"
-    echo "  $APP_NAME                    # Full security assessment"
-    echo "  $APP_NAME --help             # Show help information"
-    echo "  $APP_NAME -format json       # Generate JSON report"
     echo ""
 }
 

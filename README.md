@@ -1,56 +1,57 @@
+```markdown name=README.md
 # HARDEND - Linux Security Hardening Assessment Tool
 
-**Author:** Constantine  
+**Author:** Constantine
 **Email:** constantine.ctf@proton.me
+**Version:** 2.0.0
 
-
-A comprehensive, enterprise-grade Linux security assessment framework for system administrators and security professionals.
+A comprehensive, enterprise-grade Linux security assessment framework designed for system administrators and security professionals.
 
 ## Overview
 
-**HARDEND** is a professional Linux security hardening assessment tool that provides comprehensive security analysis across multiple categories. Built entirely in Go, it delivers enterprise-grade security assessments with detailed vulnerability analysis, risk scoring, and remediation guidance.
+**HARDEND** is a professional Linux security hardening assessment tool that provides automated, in-depth security analysis for Linux systems. Built entirely in Go, it delivers structured assessments focusing on configuration weaknesses, aligned with industry best practices.
 
-The tool performs deep security assessments across kernel parameters, service configurations, SSH security, and filesystem security to identify potential vulnerabilities and provide actionable remediation steps.
+The tool performs checks across key areas including **kernel parameters**, **running services**, **SSH configuration**, and **filesystem security** to identify potential vulnerabilities and provide actionable remediation guidance based on established security benchmarks.
 
 ## Key Features
 
 ### 🔒 Professional Security Assessment
-- **Comprehensive Coverage**: Kernel, services, SSH, and filesystem security analysis
-- **Industry Standards**: Aligned with CIS Benchmarks and NIST security guidelines
-- **Advanced Detection**: Rootkit detection, backdoor scanning, and exploit assessment
-- **Risk Scoring**: Numerical threat assessment with exploitability analysis
-- **Multiple Output Formats**: Structured reports in table, JSON, and HTML formats
+- **Comprehensive Coverage**: Analyzes kernel hardening, service security, SSH configuration, and filesystem mount options.
+- **Industry Standards Alignment**: Checks are mapped to **CIS Benchmarks** and **NIST security guidelines**, providing authoritative results.
+- **Risk Scoring**: Findings are categorized using standard severity levels (**CRITICAL**, **HIGH**, **MEDIUM**, **LOW**) to prioritize remediation.
+- **Multiple Output Formats**: Generates reports in human-readable **table** format, machine-readable **JSON**, and shareable **HTML**.
 
-### 🚀 Enterprise Capabilities
-- **Zero Dependencies**: Single binary deployment with no external requirements
-- **Stealth Mode**: Minimal footprint scanning for production environments
-- **Cross-Platform**: Linux distributions and containerized deployments
-- **Extensible Architecture**: Modular design for custom security checks
-- **Performance Optimized**: Fast execution with minimal system impact
+### ⚙️ Enterprise Capabilities
+- **Zero Dependencies**: Deploys as a single, static Go binary with no external runtime requirements.
+- **Stealth Mode**: Offers a mode with reduced system interaction for use in sensitive environments.
+- **Cross-Platform**: Designed for various Linux distributions and containerized environments.
+- **Configurable Architecture**: Assessment behavior is driven by a central YAML configuration file.
+- **Performance Optimized**: Built for fast execution with minimal system impact.
 
 ## Architecture
 
 ### Directory Structure
+
 ```
 hardend/
 ├── cmd/hardend/
 │   └── main.go                 # Application entry point
 ├── pkg/
 │   ├── checks/                 # Security check modules
-│   │   ├── types.go            # Core data structures
-│   │   ├── kernel.go           # Kernel security analysis
+│   │   ├── types.go            # Core data structures (Finding, Result, Severity)
+│   │   ├── kernel.go           # Kernel parameter analysis
 │   │   ├── services.go         # Service security analysis
-│   │   ├── ssh.go              # SSH security analysis
-│   │   ├── filesystem.go       # Filesystem security analysis
-│   │   └── runner.go           # Check orchestration
+│   │   ├── ssh.go              # SSH configuration analysis
+│   │   ├── filesystem.go       # Filesystem mount analysis
+│   │   └── runner.go           # Check orchestration logic
 │   ├── config/
-│   │   └── config.go           # Configuration management
+│   │   └── config.go           # Configuration loading and validation
 │   ├── report/
-│   │   └── report.go           # Report generation
+│   │   └── report.go           # Report generation (Table, JSON, HTML)
 │   └── utils/
-│       └── utils.go            # Utility functions
+│       └── utils.go            # Utility functions (logging, commands)
 ├── configs/
-│   └── config.yaml             # Configuration template
+│   └── config.yaml             # Default configuration and security rules
 ├── go.mod                      # Go module dependencies
 ├── install.sh                  # Installation script
 └── README.md                   # This documentation
@@ -58,299 +59,269 @@ hardend/
 
 ### Technical Stack
 - **Language**: Go 1.25+
-- **Architecture**: Modular checker system
-- **Dependencies**: Minimal external dependencies
-- **Performance**: Optimized for enterprise environments
+- **Architecture**: Modular checker system driven by configuration.
+- **Dependencies**: Minimal external dependencies (`yaml.v3`, `golang.org/x/sys`).
 
 ## Security Modules
 
-### 1. Kernel Security Analysis
-**Purpose**: Comprehensive kernel parameter and system-level security assessment
+### 1. Kernel Parameter Analysis (`kernel`)
+**Purpose**: Assess critical kernel runtime parameters (`sysctl`) against security best practices.
 
 **Key Areas**:
-- Memory protection mechanisms (ASLR, DEP, stack protection)
-- Network parameter security configuration
-- Kernel module integrity and rootkit detection
-- System call restrictions and capabilities
-- Hardware security feature utilization
+- Memory protection settings (e.g., ASLR via `kernel.randomize_va_space`).
+- Network security parameters (e.g., IP forwarding, SYN cookies, source routing).
+- Information leak prevention (e.g., dmesg restrictions, kernel pointer obfuscation).
 
-### 2. Service Security Analysis  
-**Purpose**: Service configuration and daemon security assessment
+### 2. Service Security Analysis (`services`)
+**Purpose**: Audit running and enabled system services (`systemd`) against lists of prohibited and required services.
 
 **Key Areas**:
-- Running service enumeration and analysis
-- Unnecessary service identification
-- Service configuration security review
-- Network listener analysis
-- Process integrity verification
+- Identification of insecure legacy services (e.g., `telnet`, `rsh`).
+- Verification that essential security services are active (e.g., `sshd`, `auditd`).
 
-### 3. SSH Security Analysis
-**Purpose**: SSH daemon configuration and cryptographic security assessment
+### 3. SSH Configuration Analysis (`ssh`)
+**Purpose**: Audit the SSH daemon configuration (`/etc/ssh/sshd_config`) based on security hardening guidelines.
 
 **Key Areas**:
-- SSH configuration parameter analysis
-- Cryptographic algorithm strength assessment
-- Authentication method security review
-- Key management and permissions
-- Protocol security and version analysis
+- Protocol version enforcement (Protocol 2).
+- Authentication methods (disabling root login, password authentication).
+- Session security settings (timeouts, max tries).
+- Use of secure cryptographic algorithms (future enhancement).
 
-### 4. Filesystem Security Analysis
-**Purpose**: Filesystem and mount point security assessment
+### 4. Filesystem Security Analysis (`filesystem`)
+**Purpose**: Assess filesystem mount options and types for security risks.
 
 **Key Areas**:
-- Mount point security options verification
-- Filesystem type security analysis
-- Partition layout and encryption assessment
-- Hidden filesystem detection
-- Storage security compliance
+- Verification of secure mount options (`nosuid`, `noexec`, `nodev`) on critical partitions (`/tmp`, `/var/tmp`, `/dev/shm`, `/home`).
+- Detection of potentially dangerous filesystem modules being loaded or available.
+- Analysis of partition layout and use of encryption (basic check).
 
 ## Installation
 
 ### Quick Installation
 ```bash
 # Clone repository
-git clone https://github.com/ConstantineCTF/hardend.git
+git clone https://github.com/ConstantineCTF/hardend.git  # Replace with your repo URL
 cd hardend
 
-# Install using provided script
+# Run installation script (builds the binary)
 chmod +x install.sh
 ./install.sh
+# Follow prompts (optional system-wide install)
 ```
-
 
 ## Usage
 
 ### Basic Security Assessment
+
 ```bash
-# Full system security assessment
+# Full system assessment using modules enabled in config.yaml
 ./hardend
 
-# Specific security modules
-./hardend -scans kernel,ssh,services
+# Run specific security modules
+./hardend -scans kernel,ssh
 
-# Silent mode for automated environments
-./hardend --stealth --quiet
+# Silent mode for scripting (suppresses stdout logging)
+./hardend --quiet
+
+# Stealth mode (reduces system interaction, may affect results)
+./hardend --stealth
 ```
 
 ### Report Generation
+
 ```bash
+# Generate default table report to stdout (no color)
+./hardend -format table --no-color > report.txt
+
 # Generate structured JSON report
 ./hardend -format json -output security_assessment.json
 
-# Generate HTML report for management
+# Generate HTML report
 ./hardend -format html -output security_report.html
 
-# Custom configuration
-./hardend --config custom_config.yaml
-```
-
-### Advanced Options
-```bash
-# Available output formats
-./hardend -format table    # Default formatted table
-./hardend -format json     # Machine-readable JSON
-./hardend -format html     # Web-based report
-
-# Scanning modes  
-./hardend --stealth        # Minimal system footprint
-./hardend --verbose        # Detailed logging output
-./hardend --quiet          # Silent operation
-```
-
-## Configuration
-
-### Configuration File Structure
-```yaml
-# Security scanning configuration
-scanning:
-  stealth_mode: false
-  advanced_analysis: true
-  deep_scan: true
-
-# Output preferences  
-output:
-  default_format: "table"
-  include_passed: false
-  color_output: true
-
-# Security modules
-scan_modules:
-  kernel: true
-  services: true  
-  ssh: true
-  filesystem: true
+# Use a custom configuration file
+./hardend --config /path/to/custom_config.yaml
 ```
 
 ### Command Line Options
-- `-scans`: Specify security modules to run
-- `-config`: Custom configuration file path
-- `-format`: Output format (table, json, html)
-- `-output`: Output file path
-- `--stealth`: Minimal footprint mode
-- `--quiet`: Silent operation
-- `--verbose`: Detailed logging
+
+  - `-scans <modules>`: Comma-separated list of modules to run (e.g., `kernel,services`). Defaults to modules enabled in config.
+  - `-config <path>`: Path to a custom YAML configuration file. Defaults to `configs/config.yaml`.
+  - `-format <type>`: Output format (`table`, `json`, `html`). Defaults to `table`.
+  - `-output <path>`: File path to save the report. Defaults to stdout.
+  - `--verbose`: Enable detailed debug logging.
+  - `--quiet`: Suppress informational logging to stdout.
+  - `--stealth`: Use less intrusive methods for checks (may be less accurate).
+  - `--version`: Show application version.
+  - `--help`: Display help message.
+
+## Configuration
+
+The tool's behavior is primarily controlled by `configs/config.yaml`. This file defines:
+
+  - Which security checks to run for each module.
+  - Expected secure values for parameters.
+  - Severity levels and references (e.g., CIS benchmarks) for findings.
+  - Which modules are enabled by default.
+
+See the default `configs/config.yaml` file for detailed structure and examples.
 
 ## Security Assessment Capabilities
 
-### Threat Detection
-- **Vulnerability Identification**: Comprehensive security weakness detection
-- **Risk Assessment**: Numerical scoring with exploitability analysis
-- **Compliance Checking**: CIS Benchmark and NIST guideline verification
-- **Configuration Analysis**: Security misconfigurations and drift detection
+### Hardening Checks
+
+  - **Vulnerability Identification**: Detects specific configuration weaknesses based on defined rules.
+  - **Compliance Alignment**: Maps findings to **CIS Benchmark** and **NIST guideline** references where applicable.
+  - **Configuration Analysis**: Identifies deviations from the expected secure baseline defined in the configuration.
 
 ### Reporting Features
-- **Executive Summaries**: High-level security posture assessment
-- **Technical Details**: Detailed finding descriptions and evidence
-- **Remediation Guidance**: Step-by-step fix instructions
-- **Compliance Mapping**: Control framework alignment
 
-### Assessment Categories
-- **CRITICAL**: Immediate action required, system compromised
-- **HIGH**: Serious vulnerabilities, high exploitation risk
-- **MEDIUM**: Security weaknesses, hardening recommended  
-- **LOW**: Minor issues, best practice improvements
-- **INFO**: Informational findings and system details
+  - **Prioritized Findings**: Results are presented with severity levels (**CRITICAL**, **HIGH**, **MEDIUM**, **LOW**).
+  - **Technical Details**: Includes actual vs. expected values for failed checks.
+  - **Remediation Guidance**: Provides basic commands or configuration changes to fix identified issues.
 
-## Enterprise Use Cases
+### Assessment Categories (Severity)
 
-### System Administration
-- **Security Baseline Assessment**: Regular security posture evaluation
-- **Compliance Auditing**: Regulatory requirement validation
-- **Configuration Management**: Security drift detection and monitoring
-- **Hardening Verification**: Security control effectiveness measurement
+  - **CRITICAL**: Critical misconfiguration likely leading to compromise (e.g., ASLR disabled, root SSH enabled).
+  - **HIGH**: Serious weakness violating security best practices (e.g., password auth enabled, insecure kernel parameter).
+  - **MEDIUM**: Configuration issue that reduces defense-in-depth (e.g., missing mount options).
+  - **LOW**: Minor issue or best practice deviation.
+  - **INFO**: Informational finding, not a vulnerability.
 
-### Security Operations
-- **Vulnerability Assessment**: Comprehensive security weakness identification
-- **Incident Response**: Security compromise indicator detection
-- **Risk Management**: Threat prioritization and remediation planning
-- **Security Monitoring**: Continuous security posture assessment
+## Use Cases
 
-### DevSecOps Integration
-- **Pipeline Integration**: Automated security testing in CI/CD
-- **Infrastructure Security**: Security policy validation
-- **Container Assessment**: Baseline security compliance
-- **Shift-Left Security**: Early vulnerability detection
+### System Administration & DevOps
+
+  - **Baseline Auditing**: Establish and verify security baselines across servers.
+  - **Configuration Drift Detection**: Identify unintended configuration changes.
+  - **Hardening Verification**: Confirm that hardening scripts or policies have been applied correctly.
+  - **Pre-Deployment Checks**: Assess VM or container images before production deployment.
+
+### Security Operations & Compliance
+
+  - **Vulnerability Assessment**: Identify configuration-based vulnerabilities.
+  - **Compliance Reporting**: Provide evidence for compliance audits (using CIS/NIST references).
+  - **Risk Management**: Prioritize remediation efforts based on severity.
+
+### CI/CD Integration
+
+  - Integrate `hardend` into pipelines to automatically assess builds or infrastructure changes.
+
+<!-- end list -->
+
+```yaml
+# Example GitLab CI stage
+security_audit:
+  stage: test
+  script:
+    - ./hardend --quiet -format json -output hardend_results.json
+  artifacts:
+    paths: [hardend_results.json]
+```
 
 ## Deployment Options
 
-### Standalone Deployment
-- Single binary with zero dependencies
-- Minimal resource requirements
-- Portable security assessment
+### Standalone Binary
+
+  - Build using `go build` or the `install.sh` script.
+  - Copy the single `hardend` binary to the target Linux system and execute.
 
 ### Containerized Deployment
+
 ```bash
-# Docker deployment
+# Build the Docker image
 docker build -t hardend:latest .
-docker run --rm -v /:/hostfs:ro hardend:latest
 
-# Kubernetes integration
-kubectl apply -f deployment.yaml
-```
-
-### Enterprise Integration
-```yaml
-# CI/CD Pipeline Integration
-stages:
-  - security_assessment:
-      script:
-        - ./hardend --quiet -format json -output security.json
-        - ./hardend --stealth -scans kernel,services
+# Run against the host system (read-only mount)
+docker run --rm --pid=host --net=host -v /:/hostfs:ro hardend:latest ./hardend --config /hostfs/path/to/config.yaml
+# Note: Container checks will be limited by container isolation. Running directly on the host is more comprehensive.
 ```
 
 ## Performance and Security
 
 ### System Requirements
-- **Operating System**: Linux (any major distribution)
-- **Architecture**: x86_64, ARM64 supported
-- **Memory**: 32MB RAM minimum
-- **Permissions**: Some checks require elevated privileges
-- **Network**: No external connectivity required
+
+  - **Operating System**: Linux (tested on Ubuntu, Debian, CentOS; others likely compatible).
+  - **Architecture**: x86\_64, ARM64 supported.
+  - **Memory**: Minimal RAM usage (< 32MB typical).
+  - **Permissions**: Requires root privileges (`sudo`) for most checks to access system files and configurations accurately. Running as non-root will result in skipped or inaccurate checks.
+  - **Network**: No external network connectivity required for core operation.
 
 ### Security Considerations
-- **Data Privacy**: No external data transmission
-- **Audit Logging**: Optional detailed operation logging
-- **Minimal Footprint**: Designed for production environment use
-- **Permission Handling**: Graceful privilege requirement management
+
+  - **Read-Only Operations**: The tool primarily performs read operations on system files and configurations.
+  - **Command Execution**: Uses standard Linux commands (`sysctl`, `systemctl`, `ss`, `mount`, etc.) for checks when run without `--stealth`. Stealth mode attempts to use `/proc` and direct file reads where possible.
+  - **Data Privacy**: No data is transmitted externally. Reports are generated locally.
 
 ## Development and Extension
 
 ### Adding Custom Security Checks
-```go
-// Implement the Checker interface
-type CustomChecker struct {
-    logger   *utils.Logger
-    config   *config.Config
-}
 
-func (c *CustomChecker) RunChecks(results *checks.Results) error {
-    // Custom security logic implementation
-    return nil
-}
-
-// Register with the runner
-runner.RegisterChecker("custom", NewCustomChecker())
-```
+1.  Define a new struct (e.g., `MyChecker`) in a new file within `pkg/checks/`.
+2.  Implement the `Checker` interface: `func (mc *MyChecker) RunChecks(results *checks.Results) error`.
+3.  Inside `RunChecks`, perform your checks and use `results.AddFinding(&checks.Finding{...})` to record issues.
+4.  Register your new checker in `pkg/checks/runner.go` within the `NewRunner` function: `r.checkers["mycheck"] = NewMyChecker(...)`.
+5.  Add configuration options for your check in `configs/config.yaml` and `pkg/config/config.go`.
+6.  Enable the module via the `-scans` flag or in `config.yaml`.
 
 ### Contributing Guidelines
-1. Follow Go coding standards and best practices
-2. Include comprehensive test coverage
-3. Document security check rationale and references
-4. Maintain backward compatibility
-5. Include remediation guidance for new checks
+
+1.  Adhere to standard Go coding practices (`gofmt`, `golint`).
+2.  Add unit tests for new functionality where applicable.
+3.  Document the rationale for new checks, including references to security guidelines (CIS, NIST, etc.).
+4.  Ensure new checks include clear remediation guidance in the `Finding` struct.
 
 ## Dependencies
 
 ### Runtime Dependencies
-```go
-github.com/fatih/color         // Terminal output formatting
-github.com/olekukonko/tablewriter // Table generation
-gopkg.in/yaml.v3              // Configuration parsing
-golang.org/x/sys              // System-level operations
-```
+
+  - `gopkg.in/yaml.v3`: For parsing `config.yaml`.
+  - `golang.org/x/sys`: For some system-level interactions.
 
 ### Development Dependencies
-- Go 1.21 or higher
-- Standard Linux utilities (ps, netstat, systemctl)
-- Git for version control
+
+  - Go 1.25 or higher.
+  - Standard Linux command-line utilities (used by the checks).
+  - Git.
 
 ## License and Support
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
+This project is licensed under the MIT License - see the `LICENSE` file for details.
 
 ### Support and Documentation
-- **Issues**: Report bugs and request features via GitHub Issues
-- **Documentation**: Comprehensive guides in the docs/ directory
-- **Community**: Join discussions and get support from the community
+
+  - **Issues**: Report bugs or request features via the project's GitHub Issues page.
+  - **Documentation**: Refer to this README and comments within the code.
 
 ### Security Reporting
-If you find a vulnerability in HARDEND:
-- Email: constantine.ctf@proton.me
-- Response time: 48 hours for acknowledgment :)
-- Coordinated disclosure process
+
+If you discover a security vulnerability within HARDEND itself:
+
+  - Please email constantine.ctf@proton.me directly.
+  - Allow reasonable time for acknowledgment and resolution before public disclosure.
 
 ## Roadmap
 
-### Current Version (v2077.1.0)
-- Core security modules (Kernel, Services, SSH, Filesystem)
-- Multiple output formats
-- Professional reporting capabilities
-- Enterprise deployment support
+### Current Version (v2.0.0)
 
-### Upcoming Features
-- Network security assessment module
-- User and permission analysis
-- Package vulnerability scanning
-- Enhanced compliance reporting
-- Cloud security assessment capabilities
+  - Refactored codebase for professional clarity.
+  - Core hardening modules: Kernel, Services, SSH, Filesystem.
+  - Standardized reporting: Table, JSON, HTML.
+  - Configuration-driven checks based on `config.yaml`.
 
----
+### Future Enhancements
 
-**HARDEND v2077.1.0 - Professional Linux Security Assessment Framework**  
-*Built for enterprise security professionals and system administrators*
+  - **Load Check Rules from Config**: Modify checkers (`ssh.go`, `kernel.go`, etc.) to dynamically load their rules from the `KernelConfig`, `SSHConfig` sections in `config.yaml` instead of having them hard-coded.
+  - **Implement Remaining Modules**: Build out checkers for Network, Users, Permissions, SUID, Packages, Logs, Firewall, SELinux, Cron, Boot as defined in `config.yaml`.
+  - **Enhanced Reporting**: Add scoring calculations, improved HTML report structure, potential integration templates (e.g., CSV).
+  - **Unit Testing**: Expand test coverage, particularly for checker logic.
+  - **Container-Specific Checks**: Add checks relevant when running inside containers.
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/ConstantineCTF/hardend)](https://goreportcard.com/report/github.com/ConstantineCTF/hardend)
+-----
+
+**HARDEND v2.0.0 - Professional Linux Security Assessment Framework**
+*Automated hardening checks aligned with industry standards.*
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GoDoc](https://pkg.go.dev/badge/github.com/ConstantineCTF/hardend?tab=doc)](https://pkg.go.dev/github.com/ConstantineCTF/hardend)
-
+```

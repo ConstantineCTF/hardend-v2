@@ -2,418 +2,390 @@ package checks
 
 import (
 	"bufio"
-	"crypto/sha256"
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
-	"github.com/ConstantineCTF/hardend/pkg/utils"
+	"github.com/ConstantineCTF/hardend/pkg/utils" // Ensure this import path is correct
 )
 
-// MatrixChecker handles Filesystem Matrix security analysis
-type MatrixChecker struct {
-	logger   *utils.CyberpunkLogger
+// FilesystemChecker handles filesystem security analysis
+type FilesystemChecker struct {
+	logger   *utils.Logger // Corrected: Use Logger
 	stealth  bool
-	advanced bool
+	advanced bool // Flag to potentially show more details or INFO checks
 }
 
-// NewMatrixChecker creates a new Filesystem Matrix analyzer
-func NewMatrixChecker(verbose, stealth, advanced bool) *MatrixChecker {
-	return &MatrixChecker{
-		logger:   utils.NewCyberpunkLogger(verbose, stealth),
+// NewFilesystemChecker creates a new filesystem analyzer
+func NewFilesystemChecker(verbose, stealth, advanced bool) *FilesystemChecker {
+	return &FilesystemChecker{
+		logger:   utils.NewLogger(verbose, stealth), // Corrected: Use NewLogger
 		stealth:  stealth,
 		advanced: advanced,
 	}
 }
 
-// MatrixMountInfo represents enhanced mount information
-type MatrixMountInfo struct {
+// MountInfo represents mount point information
+type MountInfo struct {
 	Device     string
 	MountPoint string
 	FSType     string
 	Options    []string
-	Flags      uintptr
 }
 
-// RunChecks performs comprehensive Filesystem Matrix security analysis
-func (mc *MatrixChecker) RunChecks(results *Results) error {
-	mc.logger.Info("◢◤ Initiating Filesystem Matrix scan...")
+// RunChecks performs comprehensive filesystem security analysis
+func (mc *FilesystemChecker) RunChecks(results *Results) error {
+	mc.logger.Info("Initiating filesystem scan...")
 
-	if !mc.stealth {
-		utils.ProgressBar("Analyzing filesystem matrix structure", 2*time.Second)
-	}
-
-	// Scan for dangerous filesystem modules
-	mc.scanDangerousFilesystems(results)
-
-	// Analyze mount point security
+	mc.scanDangerousFilesystemModules(results)
 	mc.analyzeMountSecurity(results)
+	mc.analyzePartitionLayout(results) // Basic check for separate partitions/encryption
 
-	// Check partition layout
-	mc.analyzePartitionLayout(results)
-
-	// Advanced matrix analysis
-	if mc.advanced {
-		mc.performAdvancedMatrixAnalysis(results)
-	}
-
-	// Scan for hidden filesystems and rootkits
-	mc.scanHiddenFilesystems(results)
-
-	// Check filesystem quotas and limits
-	mc.analyzeFilesystemLimits(results)
-
-	mc.logger.Info("◢◤ Filesystem Matrix scan complete")
+	mc.logger.Info("Filesystem scan complete.")
 	return nil
 }
 
-// scanDangerousFilesystems checks for dangerous filesystem types
-func (mc *MatrixChecker) scanDangerousFilesystems(results *Results) {
+// scanDangerousFilesystemModules checks for loaded or available dangerous filesystem kernel modules
+func (mc *FilesystemChecker) scanDangerousFilesystemModules(results *Results) {
+	// TODO: Load this list from config.yaml
 	dangerousFS := map[string]string{
-		"cramfs":   "compressed ROM filesystem - potential code injection",
-		"freevxfs": "Veritas filesystem - proprietary, limited security controls",
-		"jffs2":    "Journaling Flash filesystem - embedded system vulnerabilities",
-		"hfs":      "Apple HFS - case sensitivity bypass vulnerabilities",
-		"hfsplus":  "Apple HFS+ - extended attribute manipulation",
-		"udf":      "Universal Disk Format - buffer overflow vulnerabilities",
-		"squashfs": "compressed read-only filesystem - if writable, compromised",
-		"ntfs":     "Windows NTFS - ACL bypass on Linux systems",
-		"fat32":    "FAT32 - no permission controls, privilege escalation risk",
+		"cramfs":   "Legacy compressed ROM filesystem - rarely needed.",
+		"freevxfs": "Veritas filesystem - legacy, proprietary.",
+		"jffs2":    "Journaling Flash filesystem - typically for embedded devices.",
+		"hfs":      "Legacy Apple HFS - should not be needed on Linux servers.",
+		"hfsplus":  "Apple HFS+ - should not be needed on Linux servers.",
+		"udf":      "Universal Disk Format - typically for optical media, potential vulnerabilities.",
+		"squashfs": "Read-only compressed filesystem. Loading it isn't inherently bad, but check usage.", // Lower severity
 	}
 
-	for fsType, threat := range dangerousFS {
-		loaded := mc.isFilesystemLoaded(fsType)
-		available := mc.isFilesystemAvailable(fsType)
+	for fsType, desc := range dangerousFS {
+		mc.logger.Debug("Checking filesystem module: %s", fsType)
+		loaded := mc.isFilesystemModuleLoaded(fsType)
+		// Check availability only if not loaded? Or always? Let's check always for info.
+		available := mc.isFilesystemModuleAvailable(fsType)
 
 		status := StatusPass
-		severity := SeverityMedium
+		severity := SeverityLow // Default low for availability
 		exploitable := false
+		actual := "Module not loaded and not found."
 
 		if loaded {
 			status = StatusFail
-			severity = SeverityHigh
-			exploitable = true
+			severity = SeverityHigh // Loading these is generally bad practice on servers
+			if fsType == "squashfs" {
+				severity = SeverityLow
+			} // squashfs is common, make it low impact if loaded
+			exploitable = true // Could potentially be exploited if loaded unnecessarily
+			actual = "Module is loaded."
 		} else if available {
-			status = StatusWarn
-			severity = SeverityLow
+			status = StatusInfo // Changed Warn to Info for availability
+			actual = "Module is available but not loaded."
+			// Don't add finding for 'available' unless in advanced mode
+			if !mc.advanced {
+				continue
+			}
+		} else {
+			// Not loaded, not available - perfect. Don't add finding unless advanced.
+			if !mc.advanced {
+				continue
+			}
 		}
 
 		finding := &Finding{
-			ID: fmt.Sprintf("MATRIX_FS_%s", strings.ToUpper(fsType)),
-			Title: fmt.Sprintf("Dangerous filesystem %s [%s]", fsType,
-				map[bool]string{true: "LOADED", false: map[bool]string{true: "AVAILABLE", false: "SECURE"}[available]}[loaded]),
-			Description: threat,
+			ID:          fmt.Sprintf("FS_MODULE_%s", strings.ToUpper(fsType)),
+			Title:       fmt.Sprintf("Filesystem module '%s' status", fsType),
+			Description: desc,
 			Severity:    severity,
 			Status:      status,
-			Expected:    "not loaded/disabled",
-			Actual:      fmt.Sprintf("loaded: %t, available: %t", loaded, available),
+			Expected:    "Module should ideally be disabled or uninstalled.",
+			Actual:      actual,
 			Remediation: mc.getFilesystemRemediation(fsType),
-			Category:    "Filesystem Matrix",
+			Category:    "Filesystem Modules", // More specific category
 			Exploitable: exploitable,
 		}
 		results.AddFinding(finding)
+
 	}
 }
 
-// analyzeMountSecurity performs comprehensive mount point security analysis
-func (mc *MatrixChecker) analyzeMountSecurity(results *Results) {
-	mounts, err := mc.getMatrixMountInfo()
+// analyzeMountSecurity checks mount options and separate partitions
+func (mc *FilesystemChecker) analyzeMountSecurity(results *Results) {
+	mounts, err := mc.getMountInfo()
 	if err != nil {
-		mc.logger.Error("Failed to read filesystem matrix: %v", err)
+		mc.logger.Error("Failed to read mount info: %v", err)
+		// Add a finding indicating failure to read mounts
+		finding := &Finding{
+			ID:          "FS_READ_MOUNTS_ERROR",
+			Title:       "Failed to read system mount points",
+			Description: fmt.Sprintf("Error reading /proc/mounts: %v", err),
+			Severity:    SeverityMedium,
+			Status:      StatusSkip,
+			Category:    "Filesystem",
+		}
+		results.AddFinding(finding)
 		return
 	}
 
-	// Critical mount points and their required security options
+	// TODO: Load criticalMounts rules from config.yaml
 	criticalMounts := map[string][]string{
 		"/tmp":     {"nosuid", "noexec", "nodev"},
 		"/var/tmp": {"nosuid", "noexec", "nodev"},
 		"/dev/shm": {"nosuid", "noexec", "nodev"},
-		"/home":    {"nosuid", "nodev"},
-		"/var":     {"nosuid", "nodev"},
-		"/usr":     {"nodev"},
-		"/boot":    {"nosuid", "noexec", "nodev"},
+		"/home":    {"nodev"}, // CIS recommends nodev for /home. nosuid is also good practice.
+		// Add others as needed based on CIS/STIG, e.g., /var, /var/log, /var/log/audit
+		// "/var":     {"nosuid"}, // Example
+		// "/boot":    {"nosuid", "nodev", "noexec"}, // If /boot is separate
 	}
 
-	mountMap := make(map[string]MatrixMountInfo)
+	mountMap := make(map[string]MountInfo)
 	for _, mount := range mounts {
 		mountMap[mount.MountPoint] = mount
 	}
 
-	for mountPoint, requiredOpts := range criticalMounts {
-		if mount, exists := mountMap[mountPoint]; exists {
-			for _, requiredOpt := range requiredOpts {
-				hasOption := mc.hasMountOption(mount.Options, requiredOpt)
-
-				status := StatusPass
-				severity := SeverityMedium
-				exploitable := false
-
-				if !hasOption {
-					status = StatusFail
-					exploitable = true
-					if requiredOpt == "noexec" || requiredOpt == "nosuid" {
-						severity = SeverityHigh
-					}
-				}
-
-				finding := &Finding{
-					ID: fmt.Sprintf("MATRIX_MOUNT_%s_%s",
-						strings.ToUpper(strings.ReplaceAll(mountPoint, "/", "_")),
-						strings.ToUpper(requiredOpt)),
-					Title: fmt.Sprintf("Mount %s %s option [%s]", mountPoint, requiredOpt,
-						map[bool]string{true: "SECURED", false: "VULNERABLE"}[hasOption]),
-					Description: fmt.Sprintf("Security mount option %s for %s", requiredOpt, mountPoint),
-					Severity:    severity,
-					Status:      status,
-					Expected:    requiredOpt + " enabled",
-					Actual:      strings.Join(mount.Options, ","),
-					Remediation: mc.getMountRemediation(mountPoint, requiredOpt),
-					Category:    "Filesystem Matrix",
-					Exploitable: exploitable,
-				}
-				results.AddFinding(finding)
-			}
-		} else {
-			// Mount point not found as separate partition
+	// Check if critical paths are on separate partitions
+	for mountPoint := range criticalMounts {
+		if _, exists := mountMap[mountPoint]; !exists {
 			finding := &Finding{
-				ID:          fmt.Sprintf("MATRIX_SEPARATE_%s", strings.ToUpper(strings.ReplaceAll(mountPoint, "/", "_"))),
-				Title:       fmt.Sprintf("Separate partition %s [MISSING]", mountPoint),
-				Description: fmt.Sprintf("%s should be on a separate partition for security isolation", mountPoint),
-				Severity:    SeverityMedium,
-				Status:      StatusWarn,
-				Expected:    "separate partition",
-				Actual:      "part of root filesystem",
-				Category:    "Filesystem Matrix",
+				ID:          fmt.Sprintf("FS_PARTITION_%s", strings.ToUpper(strings.ReplaceAll(mountPoint, "/", "_"))),
+				Title:       fmt.Sprintf("'%s' is not on a separate partition", mountPoint),
+				Description: fmt.Sprintf("Placing %s on a separate partition helps contain issues like disk space exhaustion and allows specific mount options.", mountPoint),
+				Severity:    SeverityMedium, // Often Medium, depends on the path
+				Status:      StatusWarn,     // Warning, not a direct failure
+				Expected:    "Separate filesystem partition",
+				Actual:      "Part of another filesystem (likely root)",
+				Category:    "Filesystem Partitions", // Specific category
+				Remediation: fmt.Sprintf("Consider repartitioning the system to place %s on its own dedicated filesystem.", mountPoint),
 			}
 			results.AddFinding(finding)
 		}
 	}
+
+	// Check mount options for existing partitions
+	for _, mount := range mounts {
+		requiredOpts, isCritical := criticalMounts[mount.MountPoint]
+		if !isCritical {
+			continue // Only check options for the paths defined in criticalMounts
+		}
+
+		mc.logger.Debug("Checking options for mount point: %s", mount.MountPoint)
+		currentOptsStr := strings.Join(mount.Options, ",")
+
+		for _, requiredOpt := range requiredOpts {
+			if !mc.hasMountOption(mount.Options, requiredOpt) {
+				status := StatusFail
+				severity := SeverityMedium
+				exploitable := true // Missing security options often aid exploitation
+
+				// Elevate severity for critical options like noexec/nosuid on /tmp etc.
+				if (mount.MountPoint == "/tmp" || mount.MountPoint == "/var/tmp" || mount.MountPoint == "/dev/shm") &&
+					(requiredOpt == "noexec" || requiredOpt == "nosuid") {
+					severity = SeverityHigh
+				}
+				if mount.MountPoint == "/home" && requiredOpt == "nosuid" { // If checking nosuid on /home
+					severity = SeverityMedium
+				}
+
+				finding := &Finding{
+					ID: fmt.Sprintf("FS_MOUNT_%s_%s",
+						strings.ToUpper(strings.ReplaceAll(mount.MountPoint, "/", "_")),
+						strings.ToUpper(requiredOpt)),
+					Title:       fmt.Sprintf("Mount '%s' missing option '%s'", mount.MountPoint, requiredOpt),
+					Description: fmt.Sprintf("The '%s' filesystem mount is missing the recommended '%s' security option.", mount.MountPoint, requiredOpt),
+					Severity:    severity,
+					Status:      status,
+					Expected:    fmt.Sprintf("'%s' option present", requiredOpt),
+					Actual:      currentOptsStr,
+					Remediation: mc.getMountRemediation(mount.MountPoint, requiredOpt),
+					Category:    "Filesystem Mount Options", // Specific category
+					Exploitable: exploitable,
+				}
+				results.AddFinding(finding)
+			}
+		}
+	}
 }
 
-// analyzePartitionLayout analyzes overall partition security layout
-func (mc *MatrixChecker) analyzePartitionLayout(results *Results) {
-	mounts, err := mc.getMatrixMountInfo()
+// analyzePartitionLayout provides a basic check for encryption (LUKS)
+func (mc *FilesystemChecker) analyzePartitionLayout(results *Results) {
+	mounts, err := mc.getMountInfo()
 	if err != nil {
+		// Error already logged by analyzeMountSecurity if it was called first
 		return
 	}
 
-	// Count and analyze partition types
-	partitionTypes := make(map[string]int)
 	encryptedCount := 0
-	totalCount := len(mounts)
+	hasRootFS := false
+	isRootEncrypted := false
 
 	for _, mount := range mounts {
-		partitionTypes[mount.FSType]++
+		isEncrypted := strings.Contains(mount.Device, "/dev/mapper/crypt") || // Common pattern
+			strings.Contains(mount.Device, "/dev/mapper/luks") ||
+			mount.FSType == "crypto_LUKS" ||
+			strings.HasPrefix(mount.Device, "/dev/dm-") // Sometimes used
 
-		// Check for encrypted partitions (basic detection)
-		if strings.Contains(mount.Device, "crypt") ||
-			strings.Contains(mount.Device, "luks") ||
-			mount.FSType == "crypto_LUKS" {
+		if isEncrypted {
 			encryptedCount++
 		}
+
+		if mount.MountPoint == "/" {
+			hasRootFS = true
+			isRootEncrypted = isEncrypted
+		}
 	}
 
-	// Analyze partition diversity
-	finding := &Finding{
-		ID:          "MATRIX_PARTITION_LAYOUT",
-		Title:       fmt.Sprintf("Filesystem Matrix layout [%d partitions, %d encrypted]", totalCount, encryptedCount),
-		Description: "Overall filesystem security layout analysis",
-		Severity:    SeverityInfo,
-		Status:      StatusInfo,
-		Expected:    "secure partition layout",
-		Actual: fmt.Sprintf("%d total, %d encrypted (%.1f%%)", totalCount, encryptedCount,
-			float64(encryptedCount)/float64(totalCount)*100),
-		Category: "Filesystem Matrix",
-	}
-	results.AddFinding(finding)
-
-	// Check for encryption usage
+	// Report overall encryption status
+	actualEncryption := fmt.Sprintf("%d encrypted partitions detected.", encryptedCount)
+	severity := SeverityInfo
+	status := StatusInfo
 	if encryptedCount == 0 {
-		finding := &Finding{
-			ID:          "MATRIX_NO_ENCRYPTION",
-			Title:       "No encrypted filesystems detected [HIGH_RISK]",
-			Description: "No encrypted partitions found - data at risk if system compromised",
-			Severity:    SeverityHigh,
-			Status:      StatusFail,
-			Expected:    "encrypted sensitive partitions",
-			Actual:      "no encryption detected",
-			Category:    "Filesystem Matrix",
-			Exploitable: true,
+		severity = SeverityHigh
+		status = StatusWarn // Warning as it's a configuration choice, but risky
+		actualEncryption = "No filesystem encryption (e.g., LUKS) detected."
+	}
+
+	findingEncryption := &Finding{
+		ID:          "FS_ENCRYPTION_STATUS",
+		Title:       "Filesystem Encryption Check",
+		Description: "Checks for the presence of encrypted partitions (e.g., LUKS). Encrypting sensitive data at rest is crucial.",
+		Severity:    severity,
+		Status:      status,
+		Expected:    "Root filesystem and/or partitions with sensitive data should be encrypted.",
+		Actual:      actualEncryption,
+		Category:    "Filesystem Partitions",
+		Remediation: "Consider using LUKS (Linux Unified Key Setup) to encrypt filesystems during OS installation or by migrating data.",
+		Exploitable: encryptedCount == 0, // Data physically exploitable
+	}
+	results.AddFinding(findingEncryption)
+
+	// Specifically check if root filesystem is encrypted (often a key requirement)
+	if hasRootFS {
+		statusRoot := StatusInfo
+		severityRoot := SeverityInfo
+		if !isRootEncrypted {
+			statusRoot = StatusWarn
+			severityRoot = SeverityHigh
 		}
-		results.AddFinding(finding)
+		findingRootEnc := &Finding{
+			ID:          "FS_ROOT_ENCRYPTION",
+			Title:       "Root Filesystem Encryption Status",
+			Description: "Checks if the root filesystem ('/') appears to be encrypted.",
+			Severity:    severityRoot,
+			Status:      statusRoot,
+			Expected:    "Root filesystem encrypted (recommended).",
+			Actual:      fmt.Sprintf("Root filesystem encrypted: %t", isRootEncrypted),
+			Category:    "Filesystem Partitions",
+			Remediation: "Encrypting the root filesystem is best done during OS installation.",
+			Exploitable: !isRootEncrypted,
+		}
+		// Add this finding only if root wasn't encrypted or in advanced mode
+		if !isRootEncrypted || mc.advanced {
+			results.AddFinding(findingRootEnc)
+		}
 	}
 }
 
-// performAdvancedMatrixAnalysis conducts deep filesystem analysis
-func (mc *MatrixChecker) performAdvancedMatrixAnalysis(results *Results) {
-	mc.logger.Debug("Performing advanced filesystem matrix analysis...")
+// --- Helper Functions ---
 
-	// Analyze inode limits and usage
-	mc.analyzeInodeLimits(results)
+// isFilesystemModuleLoaded checks /proc/modules and /proc/filesystems
+func (mc *FilesystemChecker) isFilesystemModuleLoaded(fsType string) bool {
+	// Check loaded modules
+	modulesContent, err := os.ReadFile("/proc/modules")
+	if err == nil {
+		if strings.Contains(string(modulesContent), fsType+" ") {
+			return true
+		}
+	} else {
+		mc.logger.Debug("Could not read /proc/modules: %v", err)
+	}
 
-	// Check for filesystem anomalies
-	mc.detectFilesystemAnomalies(results)
-
-	// Scan for alternate data streams (if supported)
-	mc.scanAlternateDataStreams(results)
-
-	// Check filesystem journal security
-	mc.analyzeJournalSecurity(results)
-}
-
-// scanHiddenFilesystems looks for hidden or suspicious filesystems
-func (mc *MatrixChecker) scanHiddenFilesystems(results *Results) {
-	// Check for loop devices and hidden mounts
-	loopDevices, err := utils.ExecuteCommand("losetup", "-a")
-	if err == nil && strings.TrimSpace(loopDevices) != "" {
-		lines := strings.Split(loopDevices, "\n")
+	// Check built-in filesystems (or currently used)
+	filesystemsContent, err := os.ReadFile("/proc/filesystems")
+	if err == nil {
+		lines := strings.Split(string(filesystemsContent), "\n")
 		for _, line := range lines {
-			if strings.TrimSpace(line) != "" {
-				finding := &Finding{
-					ID:          fmt.Sprintf("MATRIX_HIDDEN_LOOP_%x", sha256.Sum256([]byte(line))),
-					Title:       "Hidden loop device detected",
-					Description: "Loop device mounted - potential hidden filesystem or rootkit",
-					Severity:    SeverityMedium,
-					Status:      StatusWarn,
-					Expected:    "no suspicious loop devices",
-					Actual:      line,
-					Category:    "Filesystem Matrix",
-					Exploitable: true,
+			parts := strings.Fields(line)
+			// Check second column which usually contains the fs type name
+			if len(parts) > 0 {
+				// Handle 'nodev' prefix if present
+				fsName := parts[0]
+				if fsName == "nodev" && len(parts) > 1 {
+					fsName = parts[1]
 				}
-				results.AddFinding(finding)
-			}
-		}
-	}
-
-	// Check for bind mounts (can hide files)
-	mc.detectBindMounts(results)
-
-	// Look for unusual filesystem types in /proc/filesystems
-	mc.scanUnusualFilesystems(results)
-}
-
-// detectBindMounts checks for potentially suspicious bind mounts
-func (mc *MatrixChecker) detectBindMounts(results *Results) {
-	mounts, err := mc.getMatrixMountInfo()
-	if err != nil {
-		return
-	}
-
-	bindMounts := 0
-	for _, mount := range mounts {
-		if mc.hasMountOption(mount.Options, "bind") {
-			bindMounts++
-
-			// Check if bind mount might be hiding something
-			suspicious := false
-			suspiciousPaths := []string{"/etc", "/root", "/home", "/var/log"}
-
-			for _, suspPath := range suspiciousPaths {
-				if strings.HasPrefix(mount.MountPoint, suspPath) {
-					suspicious = true
-					break
+				if fsName == fsType {
+					return true // Filesystem type is known/supported by the kernel
 				}
 			}
-
-			if suspicious {
-				finding := &Finding{
-					ID:          fmt.Sprintf("MATRIX_SUSPICIOUS_BIND_%x", sha256.Sum256([]byte(mount.MountPoint))),
-					Title:       fmt.Sprintf("Suspicious bind mount: %s", mount.MountPoint),
-					Description: "Bind mount on sensitive directory - potential file hiding",
-					Severity:    SeverityMedium,
-					Status:      StatusWarn,
-					Expected:    "no suspicious bind mounts",
-					Actual:      fmt.Sprintf("%s -> %s", mount.Device, mount.MountPoint),
-					Category:    "Filesystem Matrix",
-					Exploitable: true,
-				}
-				results.AddFinding(finding)
-			}
 		}
-	}
-
-	if bindMounts > 0 {
-		finding := &Finding{
-			ID:          "MATRIX_BIND_MOUNTS_COUNT",
-			Title:       fmt.Sprintf("Bind mounts detected: %d", bindMounts),
-			Description: "Number of bind mounts in filesystem matrix",
-			Severity:    SeverityInfo,
-			Status:      StatusInfo,
-			Expected:    "minimal bind mounts",
-			Actual:      fmt.Sprintf("%d bind mounts", bindMounts),
-			Category:    "Filesystem Matrix",
-		}
-		results.AddFinding(finding)
-	}
-}
-
-// Helper functions for filesystem analysis
-
-func (mc *MatrixChecker) isFilesystemLoaded(fsType string) bool {
-	// Check /proc/modules
-	if modules, err := utils.ReadLines("/proc/modules"); err == nil {
-		for _, module := range modules {
-			if strings.HasPrefix(module, fsType+" ") {
-				return true
-			}
-		}
-	}
-
-	// Check /proc/filesystems
-	if filesystems, err := utils.ReadLines("/proc/filesystems"); err == nil {
-		for _, fs := range filesystems {
-			if strings.Contains(fs, fsType) {
-				return true
-			}
-		}
+	} else {
+		mc.logger.Debug("Could not read /proc/filesystems: %v", err)
 	}
 
 	return false
 }
 
-func (mc *MatrixChecker) isFilesystemAvailable(fsType string) bool {
-	// Check if filesystem module exists
-	modulePaths := []string{
-		"/lib/modules/" + mc.getKernelVersion() + "/kernel/fs/" + fsType,
-		"/lib/modules/" + mc.getKernelVersion() + "/kernel/fs/" + fsType + "/" + fsType + ".ko",
+// isFilesystemModuleAvailable checks if the kernel module file exists
+func (mc *FilesystemChecker) isFilesystemModuleAvailable(fsType string) bool {
+	kernelVersion := utils.GetKernelVersion()
+	if kernelVersion == "unknown" {
+		return false // Cannot determine path without kernel version
 	}
+	// Standard path pattern for kernel modules
+	moduleDir := fmt.Sprintf("/lib/modules/%s/kernel/fs/%s/", kernelVersion, fsType)
+	moduleFile := fmt.Sprintf("%s%s.ko", moduleDir, fsType) // Assumes module name matches fsType
 
-	for _, path := range modulePaths {
-		if utils.FileExists(path) {
+	// Check if either the directory or the .ko file exists
+	if _, err := os.Stat(moduleDir); err == nil {
+		// Check for the specific .ko file as well, directory might exist but be empty
+		if _, err := os.Stat(moduleFile); err == nil {
 			return true
 		}
 	}
+	// Fallback check in general fs dir
+	moduleFileAlt := fmt.Sprintf("/lib/modules/%s/kernel/fs/%s.ko", kernelVersion, fsType)
+	if _, err := os.Stat(moduleFileAlt); err == nil {
+		return true
+	}
 
 	return false
 }
 
-func (mc *MatrixChecker) getMatrixMountInfo() ([]MatrixMountInfo, error) {
+// getMountInfo parses /proc/mounts to get current mount points
+func (mc *FilesystemChecker) getMountInfo() ([]MountInfo, error) {
+	// Using /proc/mounts provides the most current view of mounts
 	file, err := os.Open("/proc/mounts")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not open /proc/mounts: %w", err)
 	}
 	defer file.Close()
 
-	var mounts []MatrixMountInfo
+	var mounts []MountInfo
 	scanner := bufio.NewScanner(file)
 
 	for scanner.Scan() {
-		fields := strings.Fields(scanner.Text())
+		line := scanner.Text()
+		fields := strings.Fields(line)
+		// Expected format: device mount_point fs_type options dump pass
 		if len(fields) >= 4 {
-			mounts = append(mounts, MatrixMountInfo{
+			mounts = append(mounts, MountInfo{
 				Device:     fields[0],
 				MountPoint: fields[1],
 				FSType:     fields[2],
-				Options:    strings.Split(fields[3], ","),
+				Options:    strings.Split(fields[3], ","), // Options are comma-separated
 			})
+		} else {
+			mc.logger.Debug("Skipping malformed line in /proc/mounts: %s", line)
 		}
 	}
 
-	return mounts, scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading /proc/mounts: %w", err)
+	}
+
+	return mounts, nil
 }
 
-func (mc *MatrixChecker) hasMountOption(options []string, target string) bool {
+// hasMountOption checks if a specific option exists in the list of mount options
+func (mc *FilesystemChecker) hasMountOption(options []string, target string) bool {
 	for _, opt := range options {
 		if opt == target {
 			return true
@@ -422,77 +394,20 @@ func (mc *MatrixChecker) hasMountOption(options []string, target string) bool {
 	return false
 }
 
-func (mc *MatrixChecker) getKernelVersion() string {
-	if output, err := utils.ExecuteCommand("uname", "-r"); err == nil {
-		return strings.TrimSpace(output)
-	}
-	return "unknown"
+// --- Remediation Functions ---
+
+// getFilesystemRemediation provides instructions to disable a filesystem module
+func (mc *FilesystemChecker) getFilesystemRemediation(fsType string) string {
+	// Provide instructions for both blacklisting and potentially uninstalling kernel modules
+	return fmt.Sprintf(
+		"To prevent loading: Add 'install %s /bin/true' to a file in '/etc/modprobe.d/'.\nOptionally, blacklist: 'echo \"blacklist %s\" >> /etc/modprobe.d/blacklist-%s.conf'.\nRebuild initramfs ('sudo update-initramfs -u' on Debian/Ubuntu, 'sudo dracut -f' on RHEL/Fedora) and reboot.",
+		fsType, fsType, fsType)
 }
 
-// Additional analysis functions (placeholder implementations)
-
-func (mc *MatrixChecker) analyzeInodeLimits(results *Results) {
-	// Analyze inode usage across filesystems
-	finding := &Finding{
-		ID:          "MATRIX_INODE_ANALYSIS",
-		Title:       "Filesystem inode analysis",
-		Description: "Inode usage and limits across filesystem matrix",
-		Severity:    SeverityInfo,
-		Status:      StatusInfo,
-		Expected:    "adequate inode availability",
-		Actual:      "requires detailed analysis",
-		Category:    "Filesystem Matrix",
-	}
-	results.AddFinding(finding)
-}
-
-func (mc *MatrixChecker) detectFilesystemAnomalies(results *Results) {
-	// Look for filesystem inconsistencies and anomalies
-	finding := &Finding{
-		ID:          "MATRIX_ANOMALY_SCAN",
-		Title:       "Filesystem anomaly detection",
-		Description: "Scan for filesystem inconsistencies and anomalies",
-		Severity:    SeverityInfo,
-		Status:      StatusInfo,
-		Expected:    "no anomalies detected",
-		Actual:      "requires forensic analysis",
-		Category:    "Filesystem Matrix",
-	}
-	results.AddFinding(finding)
-}
-
-func (mc *MatrixChecker) scanAlternateDataStreams(results *Results) {
-	// Check for NTFS alternate data streams if NTFS is mounted
-	// This is mainly relevant for forensic analysis
-}
-
-func (mc *MatrixChecker) analyzeJournalSecurity(results *Results) {
-	// Analyze filesystem journal security settings
-}
-
-func (mc *MatrixChecker) analyzeFilesystemLimits(results *Results) {
-	// Check filesystem quotas and user limits
-}
-
-func (mc *MatrixChecker) scanUnusualFilesystems(results *Results) {
-	// Scan for unusual or potentially malicious filesystem types
-}
-
-// Remediation functions
-
-func (mc *MatrixChecker) getFilesystemRemediation(fsType string) string {
-	return fmt.Sprintf(`◢◤ FILESYSTEM MATRIX REMEDIATION:
-┌─ Blacklist module: echo 'blacklist %s' >> /etc/modprobe.d/blacklist.conf
-├─ Remove module: rmmod %s (if loaded)
-├─ Rebuild initrd: update-initramfs -u
-└─ Verify: lsmod | grep %s`, fsType, fsType, fsType)
-}
-
-func (mc *MatrixChecker) getMountRemediation(mountPoint, option string) string {
-	return fmt.Sprintf(`◢◤ MOUNT SECURITY REMEDIATION:
-┌─ Edit fstab: sudo nano /etc/fstab
-├─ Add option: %s to %s mount line
-├─ Example: UUID=xxx %s ext4 defaults,%s 0 2
-├─ Test mount: sudo mount -o remount %s
-└─ Verify: mount | grep %s`, option, mountPoint, mountPoint, option, mountPoint, mountPoint)
+// getMountRemediation provides instructions to add a mount option via fstab
+func (mc *FilesystemChecker) getMountRemediation(mountPoint, option string) string {
+	// Recommend editing fstab for persistence
+	return fmt.Sprintf(
+		"To fix permanently: Edit '/etc/fstab' and add the '%s' option to the options field for the '%s' mount point.\nExample: 'UUID=... %s ext4 defaults,errors=remount-ro,%s 0 2'.\nThen run 'sudo mount -o remount %s' to apply temporarily or reboot.",
+		option, mountPoint, mountPoint, option, mountPoint)
 }

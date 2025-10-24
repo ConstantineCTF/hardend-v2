@@ -1,34 +1,32 @@
 package checks
 
 import (
-	"crypto/md5"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
-	"github.com/ConstantineCTF/hardend/pkg/utils"
+	"github.com/ConstantineCTF/hardend/pkg/utils" // Ensure this import path is correct
 )
 
-// NeuralChecker handles kernel neural pathway security analysis
-type NeuralChecker struct {
-	logger   *utils.CyberpunkLogger
+// KernelChecker handles kernel parameter security analysis
+type KernelChecker struct {
+	logger   *utils.Logger // Corrected: Use Logger
 	stealth  bool
-	advanced bool
+	advanced bool // Flag to potentially show more details or INFO checks
 }
 
-// NewNeuralChecker creates a new neural pathway analyzer
-func NewNeuralChecker(verbose, stealth, advanced bool) *NeuralChecker {
-	return &NeuralChecker{
-		logger:   utils.NewCyberpunkLogger(verbose, stealth),
+// NewKernelChecker creates a new kernel parameter analyzer
+func NewKernelChecker(verbose, stealth, advanced bool) *KernelChecker {
+	return &KernelChecker{
+		logger:   utils.NewLogger(verbose, stealth), // Corrected: Use NewLogger
 		stealth:  stealth,
 		advanced: advanced,
 	}
 }
 
-// NeuralRule defines a kernel neural pathway security rule
-type NeuralRule struct {
+// KernelRule defines a kernel parameter security rule
+type KernelRule struct {
 	Parameter   string
 	Expected    string
 	Description string
@@ -38,433 +36,217 @@ type NeuralRule struct {
 	CVEIDs      []string
 }
 
-// RunChecks performs comprehensive neural pathway analysis
-func (nc *NeuralChecker) RunChecks(results *Results) error {
-	nc.logger.Info("◢◤ Initiating neural pathway scan...")
+// RunChecks performs comprehensive kernel parameter analysis
+func (kc *KernelChecker) RunChecks(results *Results) error {
+	kc.logger.Info("Initiating kernel parameter scan...")
 
-	if !nc.stealth {
-		utils.ProgressBar("Analyzing kernel neural matrix", 1*time.Second)
-	}
-
-	// Core neural pathway checks
-	rules := nc.getNeuralRules()
+	rules := kc.getKernelRules() // TODO: Load rules from config
 	for _, rule := range rules {
-		nc.logger.Debug("Scanning neural pathway: %s", rule.Parameter)
+		kc.logger.Debug("Scanning kernel parameter: %s", rule.Parameter)
 
-		actual, err := nc.readNeuralPathway(rule.Parameter)
+		actual, err := kc.readKernelParameter(rule.Parameter)
 		if err != nil {
+			// Log error only if verbose, as failure might be expected (e.g., param not present)
+			kc.logger.Debug("Could not read kernel parameter %s: %v", rule.Parameter, err)
+			// Add finding only if parameter is considered mandatory or critical
+			// For now, let's skip adding a finding for read errors unless it's critical
+			// You might want specific logic based on the rule severity here.
+			continue // Skip this rule if parameter can't be read
+		}
+
+		status := StatusPass
+		if actual != rule.Expected {
+			status = StatusFail
+		}
+
+		// Only add findings for non-passing statuses, or if 'advanced' flag is set (to show passing checks)
+		if status != StatusPass || kc.advanced {
 			finding := &Finding{
-				ID:          fmt.Sprintf("NEURAL_%s", strings.ToUpper(strings.ReplaceAll(rule.Parameter, ".", "_"))),
-				Title:       fmt.Sprintf("Neural pathway %s compromised", rule.Parameter),
-				Description: fmt.Sprintf("Unable to access neural pathway %s - potential intrusion", rule.Parameter),
-				Severity:    SeverityMedium,
-				Status:      StatusSkip,
+				ID:          fmt.Sprintf("KERNEL_%s", strings.ToUpper(strings.ReplaceAll(rule.Parameter, ".", "_"))),
+				Title:       fmt.Sprintf("Kernel parameter %s check", rule.Parameter), // Adjusted title
+				Description: rule.Description,
+				Severity:    rule.Severity,
+				Status:      status,
 				Expected:    rule.Expected,
-				Actual:      fmt.Sprintf("ACCESS_DENIED: %v", err),
-				Remediation: nc.getNeuralRemediation(rule.Parameter, rule.Expected),
-				Category:    "Neural Pathways",
+				Actual:      actual,
+				Remediation: kc.getKernelRemediation(rule.Parameter, rule.Expected),
+				Category:    "Kernel Parameters",
 				References:  rule.References,
 				CVEIDs:      rule.CVEIDs,
 				Exploitable: rule.Exploitable,
 			}
-			results.AddFinding(finding)
-			continue
-		}
-
-		status := StatusPass
-		threat := "SECURE"
-		if actual != rule.Expected {
-			status = StatusFail
-			threat = "COMPROMISED"
-			if rule.Exploitable {
-				threat = "CRITICALLY_EXPLOITABLE"
+			// If status is PASS but we're showing it (advanced), adjust severity/status
+			if status == StatusPass {
+				finding.Severity = SeverityInfo
+				finding.Status = StatusInfo // Report as Info if it passed but is shown
+				finding.Title = fmt.Sprintf("Kernel parameter %s compliant", rule.Parameter)
+			} else {
+				finding.Title = fmt.Sprintf("Kernel parameter %s non-compliant", rule.Parameter)
 			}
+			results.AddFinding(finding)
 		}
-
-		finding := &Finding{
-			ID:          fmt.Sprintf("NEURAL_%s", strings.ToUpper(strings.ReplaceAll(rule.Parameter, ".", "_"))),
-			Title:       fmt.Sprintf("Neural pathway %s [%s]", rule.Parameter, threat),
-			Description: rule.Description,
-			Severity:    rule.Severity,
-			Status:      status,
-			Expected:    rule.Expected,
-			Actual:      actual,
-			Remediation: nc.getNeuralRemediation(rule.Parameter, rule.Expected),
-			Category:    "Neural Pathways",
-			References:  rule.References,
-			CVEIDs:      rule.CVEIDs,
-			Exploitable: rule.Exploitable,
-		}
-		results.AddFinding(finding)
 	}
 
-	// Advanced neural analysis
-	if nc.advanced {
-		nc.performAdvancedNeuralAnalysis(results)
-	}
-
-	// Kernel module rootkit detection
-	nc.detectKernelRootkits(results)
-
-	// Memory protection analysis
-	nc.analyzeMemoryProtection(results)
-
-	nc.logger.Info("◢◤ Neural pathway scan complete - %d pathways analyzed", len(rules))
+	kc.logger.Info("Kernel parameter scan complete. %d rules analyzed.", len(rules))
 	return nil
 }
 
-// readNeuralPathway reads a kernel parameter value
-func (nc *NeuralChecker) readNeuralPathway(parameter string) (string, error) {
-	// Try /proc/sys first for stealth
+// readKernelParameter reads a kernel parameter value using /proc/sys or sysctl
+func (kc *KernelChecker) readKernelParameter(parameter string) (string, error) {
+	// Prefer /proc/sys as it's often faster and requires fewer privileges potentially
 	procPath := filepath.Join("/proc/sys", strings.ReplaceAll(parameter, ".", "/"))
 	if data, err := os.ReadFile(procPath); err == nil {
 		return strings.TrimSpace(string(data)), nil
+	} else if !os.IsNotExist(err) {
+		// Log unexpected file read error if verbose
+		kc.logger.Debug("Error reading %s: %v", procPath, err)
 	}
 
-	// Fallback to sysctl if not in stealth mode
-	if !nc.stealth {
-		output, err := utils.ExecuteCommand("sysctl", "-n", parameter)
+	// Fallback to sysctl if /proc fails or in non-stealth mode
+	if !kc.stealth {
+		// Use -e flag to ignore errors for non-existent parameters gracefully
+		output, err := utils.ExecuteCommand("sysctl", "-n", "-e", parameter)
 		if err != nil {
-			return "", fmt.Errorf("neural pathway inaccessible: %w", err)
+			// If sysctl command fails itself (not just param not found)
+			kc.logger.Debug("Sysctl command failed for %s: %v", parameter, err)
+			return "", fmt.Errorf("sysctl command failed: %w", err)
+		}
+		// If parameter doesn't exist, sysctl -e returns empty string, no error
+		if output == "" {
+			return "", fmt.Errorf("parameter not found via sysctl")
 		}
 		return strings.TrimSpace(output), nil
 	}
 
-	return "", fmt.Errorf("neural pathway blocked in stealth mode")
+	// If in stealth and /proc failed, return error
+	return "", fmt.Errorf("parameter inaccessible via /proc/sys in stealth mode")
 }
 
-// getNeuralRules returns comprehensive neural pathway security rules
-func (nc *NeuralChecker) getNeuralRules() []NeuralRule {
-	return []NeuralRule{
+// getKernelRules returns comprehensive kernel parameter security rules
+// TODO: Load this from config.go
+func (kc *KernelChecker) getKernelRules() []KernelRule {
+	// Using professional descriptions
+	return []KernelRule{
 		{
 			Parameter:   "net.ipv4.ip_forward",
 			Expected:    "0",
-			Description: "IP forwarding neural pathway - enables routing exploitation vectors",
+			Description: "IP forwarding allows the host to act as a router. Disable unless required.",
 			Severity:    SeverityHigh,
-			References:  []string{"CIS 3.1.1", "NIST SC-7"},
-			Exploitable: true,
-			CVEIDs:      []string{"CVE-2019-11477"},
+			References:  []string{"CIS 3.1.1"},
+			Exploitable: true, // Enabling can lead to MitM if misconfigured
 		},
 		{
 			Parameter:   "net.ipv4.conf.all.send_redirects",
 			Expected:    "0",
-			Description: "ICMP redirect neural pathway - enables network manipulation attacks",
+			Description: "Sending ICMP redirects can be abused for network attacks. Should be disabled.",
 			Severity:    SeverityMedium,
 			References:  []string{"CIS 3.1.2"},
 			Exploitable: true,
 		},
 		{
-			Parameter:   "net.ipv4.conf.default.send_redirects",
+			Parameter:   "net.ipv4.conf.default.send_redirects", // Also check default
 			Expected:    "0",
-			Description: "Default ICMP redirect neural pathway vulnerability",
+			Description: "Default setting for sending ICMP redirects should be disabled.",
 			Severity:    SeverityMedium,
-			References:  []string{"CIS 3.1.3"},
+			References:  []string{"CIS 3.1.2"}, // Same reference usually
 			Exploitable: true,
 		},
 		{
 			Parameter:   "net.ipv4.conf.all.accept_source_route",
 			Expected:    "0",
-			Description: "Source routing neural pathway - critical attack vector",
+			Description: "Accepting source-routed packets is a security risk and should be disabled.",
 			Severity:    SeverityHigh,
 			References:  []string{"CIS 3.2.1"},
 			Exploitable: true,
 		},
 		{
-			Parameter:   "net.ipv4.conf.default.accept_source_route",
+			Parameter:   "net.ipv4.conf.default.accept_source_route", // Also check default
 			Expected:    "0",
-			Description: "Default source routing exploitation pathway",
+			Description: "Default setting for accepting source-routed packets should be disabled.",
 			Severity:    SeverityHigh,
-			References:  []string{"CIS 3.2.2"},
+			References:  []string{"CIS 3.2.1"},
 			Exploitable: true,
 		},
 		{
-			Parameter:   "net.ipv4.icmp_echo_ignore_broadcasts",
-			Expected:    "1",
-			Description: "ICMP broadcast neural shield - prevents amplification attacks",
+			Parameter:   "net.ipv4.conf.all.accept_redirects", // Accepting redirects
+			Expected:    "0",
+			Description: "Accepting ICMP redirects can lead to MitM attacks. Should be disabled on non-routers.",
 			Severity:    SeverityMedium,
-			References:  []string{"CIS 3.2.5"},
-			Exploitable: false,
+			References:  []string{"CIS 3.2.3"},
+			Exploitable: true,
 		},
 		{
-			Parameter:   "net.ipv4.icmp_ignore_bogus_error_responses",
-			Expected:    "1",
-			Description: "Bogus ICMP neural filter - blocks malformed packet attacks",
-			Severity:    SeverityLow,
-			References:  []string{"CIS 3.2.6"},
-			Exploitable: false,
+			Parameter:   "net.ipv4.conf.default.accept_redirects", // Default for accepting
+			Expected:    "0",
+			Description: "Default setting for accepting ICMP redirects should be disabled.",
+			Severity:    SeverityMedium,
+			References:  []string{"CIS 3.2.3"},
+			Exploitable: true,
 		},
 		{
 			Parameter:   "net.ipv4.conf.all.log_martians",
 			Expected:    "1",
-			Description: "Martian packet neural logger - detects spoofing attempts",
+			Description: "Logging packets with impossible source addresses (martians) helps detect spoofing.",
 			Severity:    SeverityMedium,
 			References:  []string{"CIS 3.2.4"},
-			Exploitable: false,
+			Exploitable: false, // Logging itself isn't exploitable if disabled
 		},
 		{
 			Parameter:   "net.ipv4.tcp_syncookies",
 			Expected:    "1",
-			Description: "TCP SYN flood neural protection - prevents DoS attacks",
+			Description: "TCP SYN cookies help protect against SYN flood DoS attacks.",
 			Severity:    SeverityHigh,
 			References:  []string{"CIS 3.2.8"},
-			Exploitable: true,
-			CVEIDs:      []string{"CVE-2018-5390"},
+			Exploitable: true, // Disabling makes system vulnerable to SYN floods
 		},
 		{
 			Parameter:   "kernel.randomize_va_space",
 			Expected:    "2",
-			Description: "ASLR neural scrambler - critical memory protection",
+			Description: "Address Space Layout Randomization (ASLR) makes buffer overflow exploits harder. Should be set to 2 (full randomization).",
 			Severity:    SeverityCritical,
 			References:  []string{"CIS 1.5.3"},
-			Exploitable: true,
-			CVEIDs:      []string{"CVE-2016-3672"},
+			Exploitable: true, // Disabling makes exploits easier
 		},
 		{
 			Parameter:   "kernel.dmesg_restrict",
 			Expected:    "1",
-			Description: "Kernel log neural access control - prevents info disclosure",
-			Severity:    SeverityMedium,
+			Description: "Restricting non-root access to kernel logs (dmesg) prevents information leakage.",
+			Severity:    SeverityLow, // Often considered low/medium
 			References:  []string{"CIS 1.5.1"},
-			Exploitable: false,
+			Exploitable: false, // Info leak, not direct exploit usually
 		},
 		{
 			Parameter:   "kernel.kptr_restrict",
-			Expected:    "2",
-			Description: "Kernel pointer neural obfuscation - prevents memory exploits",
-			Severity:    SeverityHigh,
-			References:  []string{"KSPP"},
-			Exploitable: true,
+			Expected:    "2", // Setting 1 hides from non-cap users, 2 hides always unless cap_syslog
+			Description: "Restricting exposure of kernel pointer addresses via /proc prevents information leakage useful for exploits.",
+			Severity:    SeverityMedium, // Often considered medium/high
+			References:  []string{"Kernel Hardening Best Practice"},
+			Exploitable: false, // Info leak, aids exploitation
 		},
 		{
-			Parameter:   "kernel.yama.ptrace_scope",
-			Expected:    "1",
-			Description: "Ptrace neural restriction - prevents process injection",
-			Severity:    SeverityHigh,
-			References:  []string{"Ubuntu Security"},
-			Exploitable: true,
+			Parameter:   "fs.suid_dumpable", // Controls coredumps for SUID binaries
+			Expected:    "0",
+			Description: "Prevent core dumps of SUID/SGID processes to avoid leaking sensitive memory contents.",
+			Severity:    SeverityMedium,
+			References:  []string{"CIS 1.5.4"},
+			Exploitable: false, // Info leak
 		},
+		// Example rule for a parameter that might not exist on all kernels
+		// {
+		// 	Parameter:   "kernel.yama.ptrace_scope",
+		// 	Expected:    "1", // Or higher (2, 3 depending on policy)
+		// 	Description: "Restricting ptrace scope limits process debugging/injection capabilities.",
+		// 	Severity:    SeverityHigh,
+		// 	References:  []string{"Yama Security Module"},
+		// 	Exploitable: true, // Allows process injection if set to 0
+		// },
 	}
 }
 
-// performAdvancedNeuralAnalysis conducts deep neural pathway analysis
-func (nc *NeuralChecker) performAdvancedNeuralAnalysis(results *Results) {
-	nc.logger.Debug("Performing advanced neural analysis...")
-
-	// Check for kernel compilation flags
-	nc.analyzeKernelCompilation(results)
-
-	// Analyze kernel modules
-	nc.analyzeLoadedModules(results)
-
-	// Check for kernel debugging interfaces
-	nc.checkDebugInterfaces(results)
-}
-
-// analyzeKernelCompilation checks kernel compilation security flags
-func (nc *NeuralChecker) analyzeKernelCompilation(results *Results) {
-	configFile := "/proc/config.gz"
-	if !utils.FileExists(configFile) {
-		configFile = "/boot/config-" + nc.getKernelVersion()
-	}
-
-	if !utils.FileExists(configFile) {
-		finding := &Finding{
-			ID:          "NEURAL_KERNEL_CONFIG",
-			Title:       "Kernel configuration neural pathway inaccessible",
-			Description: "Unable to access kernel compilation configuration",
-			Severity:    SeverityLow,
-			Status:      StatusWarn,
-			Expected:    "accessible config",
-			Actual:      "config not found",
-			Category:    "Neural Pathways",
-		}
-		results.AddFinding(finding)
-		return
-	}
-
-	// Check for important security compilation flags
-	securityFlags := map[string]string{
-		"CONFIG_STRICT_KERNEL_RWX":    "y",
-		"CONFIG_STRICT_MODULE_RWX":    "y",
-		"CONFIG_RANDOMIZE_BASE":       "y",
-		"CONFIG_SLAB_FREELIST_RANDOM": "y",
-		"CONFIG_SECURITY":             "y",
-	}
-
-	for flag, expected := range securityFlags {
-		// This would require actual config parsing implementation
-		finding := &Finding{
-			ID:          fmt.Sprintf("NEURAL_COMPILE_%s", strings.ReplaceAll(flag, "CONFIG_", "")),
-			Title:       fmt.Sprintf("Kernel compilation flag %s", flag),
-			Description: fmt.Sprintf("Security compilation flag %s analysis", flag),
-			Severity:    SeverityMedium,
-			Status:      StatusInfo,
-			Expected:    expected,
-			Actual:      "requires_analysis",
-			Category:    "Neural Pathways",
-		}
-		results.AddFinding(finding)
-	}
-}
-
-// analyzeLoadedModules checks for suspicious kernel modules
-func (nc *NeuralChecker) analyzeLoadedModules(results *Results) {
-	modules, err := utils.ReadLines("/proc/modules")
-	if err != nil {
-		return
-	}
-
-	suspiciousModules := []string{"rootkit", "backdoor", "stealth", "hide"}
-	loadedCount := 0
-
-	for _, module := range modules {
-		loadedCount++
-		fields := strings.Fields(module)
-		if len(fields) > 0 {
-			moduleName := strings.ToLower(fields[0])
-			for _, suspicious := range suspiciousModules {
-				if strings.Contains(moduleName, suspicious) {
-					finding := &Finding{
-						ID:          fmt.Sprintf("NEURAL_SUSPICIOUS_MODULE_%s", strings.ToUpper(fields[0])),
-						Title:       fmt.Sprintf("Suspicious neural module detected: %s", fields[0]),
-						Description: "Potentially malicious kernel module loaded",
-						Severity:    SeverityHigh,
-						Status:      StatusFail,
-						Expected:    "no suspicious modules",
-						Actual:      fmt.Sprintf("module %s loaded", fields[0]),
-						Category:    "Neural Pathways",
-						Exploitable: true,
-					}
-					results.AddFinding(finding)
-				}
-			}
-		}
-	}
-
-	finding := &Finding{
-		ID:          "NEURAL_MODULE_COUNT",
-		Title:       fmt.Sprintf("Neural modules loaded: %d", loadedCount),
-		Description: "Total number of kernel modules in neural matrix",
-		Severity:    SeverityInfo,
-		Status:      StatusInfo,
-		Expected:    "minimal modules",
-		Actual:      fmt.Sprintf("%d modules", loadedCount),
-		Category:    "Neural Pathways",
-	}
-	results.AddFinding(finding)
-}
-
-// detectKernelRootkits performs basic rootkit detection
-func (nc *NeuralChecker) detectKernelRootkits(results *Results) {
-	// Check for common rootkit signatures
-	rootkitSigs := []string{
-		"/proc/ksyms_memory_disclosure",
-		"/proc/kernel_rootkit",
-		"/sys/kernel/rootkit",
-	}
-
-	for _, sig := range rootkitSigs {
-		if utils.FileExists(sig) {
-			finding := &Finding{
-				ID:          fmt.Sprintf("NEURAL_ROOTKIT_%x", md5.Sum([]byte(sig))),
-				Title:       "Kernel rootkit signature detected",
-				Description: fmt.Sprintf("Rootkit signature found: %s", sig),
-				Severity:    SeverityCritical,
-				Status:      StatusFail,
-				Expected:    "no rootkit signatures",
-				Actual:      fmt.Sprintf("signature: %s", sig),
-				Category:    "Neural Pathways",
-				Exploitable: true,
-			}
-			results.AddFinding(finding)
-		}
-	}
-}
-
-// analyzeMemoryProtection checks memory protection mechanisms
-func (nc *NeuralChecker) analyzeMemoryProtection(results *Results) {
-	// Check if SMEP/SMAP are available
-	if cpuinfo, err := utils.ReadLines("/proc/cpuinfo"); err == nil {
-		hasSmep := false
-		hasSmap := false
-
-		for _, line := range cpuinfo {
-			if strings.Contains(line, "flags") || strings.Contains(line, "Features") {
-				if strings.Contains(line, "smep") {
-					hasSmep = true
-				}
-				if strings.Contains(line, "smap") {
-					hasSmap = true
-				}
-			}
-		}
-
-		finding := &Finding{
-			ID:          "NEURAL_MEMORY_PROTECTION",
-			Title:       "Hardware memory protection analysis",
-			Description: "CPU hardware memory protection features",
-			Severity:    SeverityMedium,
-			Status:      StatusInfo,
-			Expected:    "SMEP+SMAP enabled",
-			Actual:      fmt.Sprintf("SMEP: %t, SMAP: %t", hasSmep, hasSmap),
-			Category:    "Neural Pathways",
-		}
-		results.AddFinding(finding)
-	}
-}
-
-// checkDebugInterfaces checks for kernel debugging interfaces
-func (nc *NeuralChecker) checkDebugInterfaces(results *Results) {
-	debugPaths := []string{
-		"/proc/kcore",
-		"/proc/kallsyms",
-		"/sys/kernel/debug",
-		"/dev/kmem",
-		"/dev/mem",
-	}
-
-	for _, path := range debugPaths {
-		if utils.FileExists(path) {
-			info, err := os.Stat(path)
-			if err == nil {
-				mode := info.Mode()
-				accessible := mode&0044 != 0 // world readable
-
-				status := StatusPass
-				if accessible {
-					status = StatusWarn
-				}
-
-				finding := &Finding{
-					ID:          fmt.Sprintf("NEURAL_DEBUG_%x", md5.Sum([]byte(path))),
-					Title:       fmt.Sprintf("Debug interface: %s", path),
-					Description: "Kernel debugging interface accessibility",
-					Severity:    SeverityLow,
-					Status:      status,
-					Expected:    "restricted access",
-					Actual:      fmt.Sprintf("mode: %o", mode),
-					Category:    "Neural Pathways",
-				}
-				results.AddFinding(finding)
-			}
-		}
-	}
-}
-
-// getKernelVersion returns the current kernel version
-func (nc *NeuralChecker) getKernelVersion() string {
-	if output, err := utils.ExecuteCommand("uname", "-r"); err == nil {
-		return strings.TrimSpace(output)
-	}
-	return "unknown"
-}
-
-// getNeuralRemediation returns remediation for neural pathway issues
-func (nc *NeuralChecker) getNeuralRemediation(parameter, expectedValue string) string {
-	return fmt.Sprintf(`◢◤ NEURAL PATHWAY REMEDIATION:
-┌─ Immediate: sysctl -w %s=%s
-├─ Persistent: echo '%s = %s' >> /etc/sysctl.conf  
-├─ Apply: sysctl -p /etc/sysctl.conf
-└─ Verify: sysctl %s`,
-		parameter, expectedValue, parameter, expectedValue, parameter)
+// getKernelRemediation returns remediation for kernel parameter issues
+func (kc *KernelChecker) getKernelRemediation(parameter, expectedValue string) string {
+	// Standard sysctl remediation instructions
+	return fmt.Sprintf(
+		"To apply immediately: 'sudo sysctl -w %s=%s'.\nTo make persistent: Add '%s = %s' to '/etc/sysctl.conf' or a file in '/etc/sysctl.d/' and run 'sudo sysctl -p'.",
+		parameter, expectedValue, parameter, expectedValue)
 }
