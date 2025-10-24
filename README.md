@@ -323,4 +323,3 @@ If you discover a security vulnerability within HARDEND itself:
 *Automated hardening checks aligned with industry standards.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-```
