@@ -100,7 +100,7 @@ hardend/
 ### Quick Installation
 ```bash
 # Clone repository
-git clone https://github.com/ConstantineCTF/hardend.git  # Replace with your repo URL
+git clone https://github.com/ConstantineCTF/hardend-v2.git
 cd hardend
 
 # Run installation script (builds the binary)
