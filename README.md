@@ -101,7 +101,7 @@ hardend/
 ```bash
 # Clone repository
 git clone https://github.com/ConstantineCTF/hardend-v2.git
-cd hardend
+cd hardend-v2/
 
 # Run installation script (builds the binary)
 chmod +x install.sh
