@@ -122,17 +122,21 @@ install_system() {
 # Test installation
 test_installation() {
     echo -e "${GREEN}Verifying installation...${NC}"
-    if command -v $APP_NAME &> /dev/null && [[ -L "$INSTALL_BIN_DIR/$APP_NAME" ]]; then
-        echo -n "System-wide: "
+    APP_PATH=$(command -v $APP_NAME) # Find where the command is located
+
+    # Check if the command exists in the PATH and is executable
+    if [[ -n "$APP_PATH" ]] && [[ -x "$APP_PATH" ]]; then
+        echo -n "System-wide ($APP_PATH): "
         if $APP_NAME --version &> /dev/null; then
             echo -e "${GREEN}OK${NC}"
             $APP_NAME --version
         else
-            echo -e "${RED}Failed. Could not execute $APP_NAME.${NC}"
+            echo -e "${RED}Failed. Could not execute $APP_NAME from PATH.${NC}"
             return 1
         fi
-    elif [[ -f "./$APP_NAME" ]]; then
-        echo -n "Local build: "
+    # Fallback check for local build if not found in PATH
+    elif [[ -f "./$APP_NAME" ]] && [[ -x "./$APP_NAME" ]]; then
+        echo -n "Local build (./$APP_NAME): "
         if ./$APP_NAME --version &> /dev/null; then
             echo -e "${GREEN}OK${NC}"
             ./$APP_NAME --version
@@ -142,7 +146,7 @@ test_installation() {
             return 1
         fi
     else
-        echo -e "${RED}Error: $APP_NAME binary not found in system path or current directory.${NC}"
+        echo -e "${RED}Error: $APP_NAME binary not found in system PATH or current directory.${NC}"
         return 1
     fi
     return 0
